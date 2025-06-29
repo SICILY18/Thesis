@@ -5,6 +5,7 @@ node_modules/@next/swc-win32-x64-msvc/next-swc.win32-x64-msvc.node
 # Build files
 /build
 /dist
+.next/
 
 # Environment files
 .env
