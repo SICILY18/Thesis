@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use App\Http\Controllers\AdminAuthController;
+use App\Http\Controllers\TicketController;
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -39,6 +40,17 @@ Route::middleware(['web', 'admin.auth'])->prefix('admin')->group(function () {
         return Inertia::render('AdminDashboard');
     })->name('admin.dashboard');
 
+    // Tickets routes
+    Route::get('/tickets', function () {
+        return Inertia::render('Tickets');
+    })->name('admin.tickets');
+    
+    Route::prefix('tickets')->group(function () {
+        Route::get('/data', [TicketController::class, 'index']);
+        Route::post('/{id}/remarks', [TicketController::class, 'addRemarks']);
+        Route::put('/{id}', [TicketController::class, 'update']);
+    });
+
     Route::get('/profile', function () {
         return Inertia::render('Profile', [
             'auth' => [
@@ -54,10 +66,6 @@ Route::middleware(['web', 'admin.auth'])->prefix('admin')->group(function () {
     Route::get('/announcement', function () {
         return Inertia::render('Announcement');
     })->name('admin.announcement');
-
-    Route::get('/tickets', function () {
-        return Inertia::render('Tickets');
-    })->name('admin.tickets');
 
     Route::get('/reports', function () {
         return Inertia::render('Reports');
@@ -85,10 +93,6 @@ Route::middleware(['web', 'admin.auth'])->prefix('bill-handler')->group(function
             ],
         ]);
     })->name('bill-handler.profile');
-
-    Route::get('/tickets', function () {
-        return Inertia::render('Tickets');
-    })->name('bill-handler.tickets');
 
     Route::get('/billing', function () {
         return Inertia::render('BillHandlerBilling');
@@ -390,6 +394,13 @@ Route::post('/test-create-customer', function () {
             'trace' => $e->getTraceAsString()
         ], 500);
     }
+});
+
+Route::middleware(['auth'])->group(function () {
+    // Tickets
+    Route::get('/api/tickets', [TicketController::class, 'index']);
+    Route::post('/api/tickets/{id}/remarks', [TicketController::class, 'addRemarks']);
+    Route::put('/api/tickets/{id}', [TicketController::class, 'update']);
 });
 
 require __DIR__.'/auth.php';

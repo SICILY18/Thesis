@@ -46,13 +46,36 @@ class AdminProfileController extends Controller
 
         return null;
     }
+
+    private function getProfilePictureUrl($path)
+    {
+        if (!$path) {
+            return null;
+        }
+
+        // If it's already a full URL, return it
+        if (filter_var($path, FILTER_VALIDATE_URL)) {
+            return $path;
+        }
+
+        // If it's a path, convert it to a full URL
+        return url('storage/' . $path);
+    }
+
     public function show()
     {
         try {
             $authUser = Auth::user();
             if (!$authUser) {
+                \Log::warning('Profile show: No authenticated user');
                 return response()->json(['success' => false, 'message' => 'Not authenticated'], 401);
             }
+
+            \Log::info('Profile show: Fetching profile for user', [
+                'user_id' => $authUser->id,
+                'user_name' => $authUser->name,
+                'user_email' => $authUser->email
+            ]);
 
             // Find staff record by matching user name or email
             $staff = DB::table('staff_tb')
@@ -69,6 +92,11 @@ class AdminProfileController extends Controller
             }
 
             if (!$staff) {
+                \Log::warning('Profile show: Staff record not found', [
+                    'user_id' => $authUser->id,
+                    'user_name' => $authUser->name,
+                    'user_email' => $authUser->email
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Staff record not found'
@@ -77,27 +105,71 @@ class AdminProfileController extends Controller
 
             // Build profile picture URL if exists
             $profilePictureUrl = null;
-            $decodedPicture = $this->decodeProfilePicture($staff->profile_picture);
-            if ($decodedPicture) {
-                $profilePictureUrl = url('storage/' . $decodedPicture);
+            if (isset($staff->profile_picture) && $staff->profile_picture) {
+                try {
+                    // If it's already a path (from new upload format)
+                    if (is_string($staff->profile_picture) && !str_contains($staff->profile_picture, '{')) {
+                        $profilePictureUrl = $this->getProfilePictureUrl($staff->profile_picture);
+                    } else {
+                        // Try to decode old format
+                        $decodedPicture = $this->decodeProfilePicture($staff->profile_picture);
+                        if ($decodedPicture) {
+                            $profilePictureUrl = $this->getProfilePictureUrl($decodedPicture);
+                        }
+                    }
+
+                    // Verify file exists
+                    $filePath = str_replace(url('storage/'), '', $profilePictureUrl);
+                    $fullPath = storage_path('app/public/' . $filePath);
+                    if (!file_exists($fullPath)) {
+                        \Log::warning('Profile picture file not found', [
+                            'staff_id' => $staff->id,
+                            'file_path' => $filePath,
+                            'full_path' => $fullPath
+                        ]);
+                        $profilePictureUrl = null;
+                    }
+                } catch (\Exception $e) {
+                    \Log::warning('Profile show: Failed to decode profile picture', [
+                        'error' => $e->getMessage(),
+                        'staff_id' => $staff->id,
+                        'profile_picture_raw' => $staff->profile_picture,
+                        'profile_picture_type' => gettype($staff->profile_picture)
+                    ]);
+                    $profilePictureUrl = null;
+                }
             }
 
+            \Log::info('Profile show: Returning profile data', [
+                'staff_id' => $staff->id,
+                'profile_picture_url' => $profilePictureUrl,
+                'profile_picture_raw' => $staff->profile_picture
+            ]);
+
             return response()->json([
-                'admin_id' => $staff->id,
-                'name' => $staff->name,
-                'address' => $staff->address ?? '',
-                'contact' => $staff->contact_number ?? '',
-                'email' => $staff->email ?? '',
-                'role' => $staff->role,
-                'profile_picture' => $profilePictureUrl
+                'success' => true,
+                'data' => [
+                    'admin_id' => $staff->id,
+                    'name' => $staff->name,
+                    'address' => $staff->address ?? '',
+                    'contact' => $staff->contact_number ?? '',
+                    'email' => $staff->email ?? '',
+                    'role' => $staff->role,
+                    'profile_picture' => $profilePictureUrl
+                ]
             ]);
 
         } catch (\Exception $e) {
             \Log::error('Profile show error: ' . $e->getMessage(), [
                 'user_id' => Auth::id(),
-                'user_name' => Auth::user() ? Auth::user()->name : null
+                'user_name' => Auth::user() ? Auth::user()->name : null,
+                'trace' => $e->getTraceAsString()
             ]);
-            return response()->json(['error' => 'Failed to load profile'], 500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load profile',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
         }
     }
 
@@ -158,11 +230,13 @@ class AdminProfileController extends Controller
                     }
 
                     // Delete old profile picture if exists
-                    $oldPicture = $this->decodeProfilePicture($staff->profile_picture);
-                    if ($oldPicture) {
-                        $old_path = storage_path('app/public/' . $oldPicture);
-                        if (file_exists($old_path)) {
-                            @unlink($old_path);
+                    if (isset($staff->profile_picture) && $staff->profile_picture) {
+                        $oldPicture = $this->decodeProfilePicture($staff->profile_picture);
+                        if ($oldPicture) {
+                            $old_path = storage_path('app/public/' . $oldPicture);
+                            if (file_exists($old_path)) {
+                                @unlink($old_path);
+                            }
                         }
                     }
 
@@ -171,10 +245,17 @@ class AdminProfileController extends Controller
                     
                     // Store new profile picture
                     $path = $file->storeAs('profile-pictures', $filename, 'public');
+                    if (!$path) {
+                        throw new \Exception('Failed to store profile picture');
+                    }
                     $updateData['profile_picture'] = $path;
                     
                 } catch (\Exception $e) {
-                    \Log::error('Profile picture upload failed: ' . $e->getMessage());
+                    \Log::error('Profile picture upload failed: ' . $e->getMessage(), [
+                        'staff_id' => $staff->id,
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString()
+                    ]);
                     return response()->json([
                         'success' => false,
                         'message' => 'Failed to upload profile picture: ' . $e->getMessage()
@@ -203,27 +284,30 @@ class AdminProfileController extends Controller
                 ->where('id', $staff->id)
                 ->first();
             
-            // Use the path from updateData if it was just uploaded, otherwise decode from database
-            $profilePicturePath = null;
+            // Build profile picture URL
+            $profilePictureUrl = null;
             if (isset($updateData['profile_picture'])) {
-                $profilePicturePath = $updateData['profile_picture'];
-            } else {
-                $profilePicturePath = $this->decodeProfilePicture($updatedStaff->profile_picture);
+                $profilePictureUrl = $this->getProfilePictureUrl($updateData['profile_picture']);
+            } elseif (isset($updatedStaff->profile_picture) && $updatedStaff->profile_picture) {
+                $decodedPicture = $this->decodeProfilePicture($updatedStaff->profile_picture);
+                if ($decodedPicture) {
+                    $profilePictureUrl = $this->getProfilePictureUrl($decodedPicture);
+                }
             }
             
             // Log the profile picture value for debugging
             \Log::info('Profile picture after update', [
                 'staff_id' => $staff->id,
-                'profile_picture_raw' => $updatedStaff->profile_picture,
-                'profile_picture_decoded' => $profilePicturePath,
-                'profile_picture_type' => gettype($updatedStaff->profile_picture),
+                'profile_picture_raw' => $updatedStaff->profile_picture ?? 'null',
+                'profile_picture_decoded' => $profilePictureUrl ?? 'null',
+                'profile_picture_type' => isset($updatedStaff->profile_picture) ? gettype($updatedStaff->profile_picture) : 'null',
                 'update_data_picture' => $updateData['profile_picture'] ?? 'not set'
             ]);
             
             return response()->json([
                 'success' => true,
                 'message' => 'Profile updated successfully',
-                'profile_picture' => $profilePicturePath ? url('storage/' . $profilePicturePath) : null,
+                'profile_picture' => $profilePictureUrl,
                 'data' => [
                     'admin_id' => $updatedStaff->id,
                     'name' => $updatedStaff->name,

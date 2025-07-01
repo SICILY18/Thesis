@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { router, Head } from '@inertiajs/react';
+import api from '@/utils/api';
 
 const AdminLogin = () => {
     const [username, setUsername] = useState('');
@@ -11,7 +11,7 @@ const AdminLogin = () => {
 
     useEffect(() => {
         const getCsrfToken = async () => {
-            await axios.get('/sanctum/csrf-cookie');
+            await api.get('/sanctum/csrf-cookie');
         };
         getCsrfToken();
     }, []);
@@ -21,7 +21,7 @@ const AdminLogin = () => {
         setError('');
 
         try {
-            const response = await axios.post('/api/admin-login', {
+            const response = await api.post('/admin-login', {
                 username,
                 password,
             });

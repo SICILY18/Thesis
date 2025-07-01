@@ -12,13 +12,10 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('ticket_id');
             $table->text('remarks');
-            $table->string('user');
             $table->timestamps();
 
-            $table->foreign('ticket_id')
-                  ->references('ticket_id')
-                  ->on('tickets_tb')
-                  ->onDelete('cascade');
+            // Add index for better performance
+            $table->index('ticket_id');
         });
     }
 

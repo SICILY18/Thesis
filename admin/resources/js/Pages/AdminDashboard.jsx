@@ -16,6 +16,7 @@ import {
 import { Line, Pie, Bar } from 'react-chartjs-2';
 import axios from 'axios';
 import DynamicTitleLayout from '@/Layouts/DynamicTitleLayout';
+import TicketCount from '@/Components/TicketCount';
 
 ChartJS.register(
     CategoryScale,
@@ -190,7 +191,10 @@ const AdminDashboard = () => {
                             </Link>
                             <Link href="/admin/tickets" className={`flex items-center px-6 py-3 text-base ${window.location.pathname === '/admin/tickets' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                                 <span className="material-symbols-outlined mr-3">confirmation_number</span>
-                                Tickets
+                                <div className="flex items-center">
+                                    Tickets
+                                    <TicketCount />
+                                </div>
                             </Link>
                             <Link href="/admin/profile" className={`flex items-center px-6 py-3 text-base ${window.location.pathname === '/admin/profile' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                                 <span className="material-symbols-outlined mr-3">person</span>
@@ -199,17 +203,8 @@ const AdminDashboard = () => {
                         </div>
                         <div className="flex-shrink-0">
                             <button
-                                onClick={async () => {
-                                    if (window.confirm('Are you sure you want to log out?')) {
-                                        try {
-                                            await axios.get('/sanctum/csrf-cookie');
-                                            await axios.post('/admin/logout');
-                                            window.location.href = '/';
-                                        } catch (error) {
-                                            window.location.href = '/';
-                                        }
-                                    }
-                                }}
+                                data-logout="true"
+                                type="button"
                                 className="flex items-center px-6 py-3 text-base text-gray-600 hover:text-red-600 hover:bg-red-50 w-full text-left"
                             >
                                 <span className="material-symbols-outlined mr-3">logout</span>
@@ -232,8 +227,8 @@ const AdminDashboard = () => {
                 <div className="lg:ml-[240px] p-3 sm:p-4 md:p-6 lg:p-6 pt-16 lg:pt-6">
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
-                        <h1 className="text-xl font-semibold">Dashboard</h1>
-                        <div className="flex items-center w-full sm:w-auto gap-2">
+                        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+                        <div className="flex items-center gap-4">
                             <select
                                 value={selectedCategory}
                                 onChange={e => setSelectedCategory(e.target.value)}
@@ -247,7 +242,7 @@ const AdminDashboard = () => {
                                 <img 
                                     src={profilePicture || `https://ui-avatars.com/api/?name=${auth?.user?.name || 'Admin'}&background=0D8ABC&color=fff`}
                                     alt="Profile" 
-                                    className="w-8 h-8 rounded-full cursor-pointer hover:opacity-80 transition-opacity object-cover"
+                                    className="w-10 h-10 rounded-full cursor-pointer hover:opacity-80 transition-opacity object-cover"
                                 />
                             </Link>
                         </div>

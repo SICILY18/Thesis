@@ -1,6 +1,6 @@
 import React from 'react';
 
-const ConfirmDialog = ({ isOpen, message, onConfirm, onCancel }) => {
+const ConfirmDialog = ({ isOpen, message, onConfirm, onCancel, confirmButtonText = 'Confirm' }) => {
     if (!isOpen) return null;
 
     return (
@@ -22,7 +22,7 @@ const ConfirmDialog = ({ isOpen, message, onConfirm, onCancel }) => {
                         onClick={onConfirm}
                         className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
                     >
-                        Delete
+                        {confirmButtonText}
                     </button>
                 </div>
             </div>

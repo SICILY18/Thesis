@@ -20,17 +20,12 @@ class HandleAdminAuth
             'auth_user' => Auth::guard('web')->user() ? Auth::guard('web')->user()->toArray() : null
         ]);
 
-        // Check if user is authenticated via web guard
+        // Check if user is authenticated
         if (!Auth::guard('web')->check()) {
-            Log::warning('User not authenticated, redirecting to login', [
-                'url' => $request->url(),
-                'session_id' => $request->session()->getId()
-            ]);
-            
             if ($request->expectsJson()) {
                 return response()->json(['message' => 'Unauthenticated.'], 401);
             }
-            return redirect('/')->with('error', 'Please log in to access the admin panel.');
+            return redirect('/');
         }
 
         Log::info('User authenticated, proceeding', [
@@ -38,11 +33,12 @@ class HandleAdminAuth
             'url' => $request->url()
         ]);
 
+        // Get the response
         $response = $next($request);
-        // Add no-cache headers to all admin-authenticated responses
-        $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-        $response->headers->set('Pragma', 'no-cache');
-        $response->headers->set('Expires', '0');
-        return $response;
+
+        // Add cache control headers to prevent caching of protected pages
+        return $response->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+                       ->header('Pragma', 'no-cache')
+                       ->header('Expires', 'Sat, 01 Jan 2000 00:00:00 GMT');
     }
 } 

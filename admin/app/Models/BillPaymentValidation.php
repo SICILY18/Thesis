@@ -9,23 +9,30 @@ class BillPaymentValidation extends Model
 {
     use HasFactory;
 
-    protected $table = 'bill_payment_validation_tb';
+    protected $table = 'payment_history_tb';
 
     protected $fillable = [
-        'customer',
         'account_number',
-        'amount',
-        'status',
-        'account_type',
-        'period',
-        'payment_date',
+        'full_name',
+        'amount_paid',
+        'bill_amount',
         'payment_method',
-        'reference',
+        'payment_reference',
+        'bill_type',
+        'billing_period',
+        'due_date',
+        'payment_status',
+        'payment_date',
+        'validated_at',
+        'admin_notes',
     ];
 
     protected $casts = [
-        'amount' => 'decimal:2',
+        'amount_paid' => 'decimal:2',
+        'bill_amount' => 'decimal:2',
         'payment_date' => 'datetime',
+        'validated_at' => 'datetime',
+        'due_date' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

@@ -19,7 +19,10 @@ return new class extends Migration
             $table->string('status', 20);
             $table->string('account_type', 50); // Commercial, Residential, or Government
             $table->string('period', 20);
+            $table->string('payment_status')->default('pending_validation');
             $table->timestamp('payment_date')->nullable();
+            $table->timestamp('validated_at')->nullable();
+            $table->text('admin_notes')->nullable();
             $table->string('payment_method', 50)->nullable();
             $table->string('reference', 100)->nullable();
             $table->timestamps();

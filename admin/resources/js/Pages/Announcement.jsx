@@ -3,6 +3,7 @@ import { Link, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import DynamicTitleLayout from '@/Layouts/DynamicTitleLayout';
 import Notification from '@/Components/Notification';
+import TicketCount from '@/Components/TicketCount';
 
 const initialAnnouncements = [
   { id: 1, title: 'Water Interruption', content: 'There will be a scheduled water interruption on May 25, 2025.' },
@@ -82,11 +83,11 @@ const Announcement = () => {
   const fetchProfileData = async () => {
     try {
       const response = await axios.get('/api/admin/profile');
-      if (response.data && response.data.profile_picture) {
-        setProfilePicture(response.data.profile_picture);
+      if (response.data?.success && response.data?.data?.profile_picture) {
+        setProfilePicture(response.data.data.profile_picture);
       }
     } catch (error) {
-      // ignore error for now
+      console.error('Error fetching profile:', error);
     }
   };
 
@@ -232,7 +233,10 @@ const Announcement = () => {
               </Link>
               <Link href="/admin/tickets" className={`flex items-center px-6 py-3 text-base ${window.location.pathname === '/admin/tickets' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                 <span className="material-symbols-outlined mr-3">confirmation_number</span>
-                Tickets
+                <div className="flex items-center">
+                    Tickets
+                    <TicketCount />
+                </div>
               </Link>
               <Link href="/admin/profile" className={`flex items-center px-6 py-3 text-base ${window.location.pathname === '/admin/profile' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                 <span className="material-symbols-outlined mr-3">person</span>
@@ -241,17 +245,8 @@ const Announcement = () => {
             </div>
             <div className="flex-shrink-0">
               <button
-                onClick={async () => {
-                  if (window.confirm('Are you sure you want to log out?')) {
-                    try {
-                      await axios.get('/sanctum/csrf-cookie');
-                      await axios.post('/admin/logout');
-                      window.location.href = '/';
-                    } catch (error) {
-                      window.location.href = '/';
-                    }
-                  }
-                }}
+                data-logout="true"
+                type="button"
                 className="flex items-center px-6 py-3 text-base text-gray-600 hover:text-red-600 hover:bg-red-50 w-full text-left"
               >
                 <span className="material-symbols-outlined mr-3">logout</span>
@@ -274,18 +269,16 @@ const Announcement = () => {
         <div className="lg:ml-[240px] p-3 sm:p-4 md:p-6 lg:p-6 pt-16 lg:pt-6">
           {/* Header Section */}
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-xl font-semibold">Manage Announcements</h1>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">{auth?.user?.name}</span>
-                <Link href="/admin/profile">
-                  <img
-                    src={profilePicture || `https://ui-avatars.com/api/?name=${auth?.user?.name || 'Admin'}&background=0D8ABC&color=fff`}
-                    alt="Profile"
-                    className="w-8 h-8 rounded-full cursor-pointer hover:opacity-80 transition-opacity object-cover"
-                  />
-                </Link>
-              </div>
+            <h1 className="text-3xl font-bold text-gray-900">Manage Announcements</h1>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">{auth?.user?.name}</span>
+              <Link href="/admin/profile">
+                <img
+                  src={profilePicture || `https://ui-avatars.com/api/?name=${auth?.user?.name || 'Admin'}&background=0D8ABC&color=fff`}
+                  alt="Profile"
+                  className="w-10 h-10 rounded-full cursor-pointer hover:opacity-80 transition-opacity object-cover"
+                />
+              </Link>
             </div>
           </div>
 

@@ -3,6 +3,8 @@ import { Link } from '@inertiajs/react';
 import axios from 'axios';
 import DynamicTitleLayout from '@/Layouts/DynamicTitleLayout';
 import Notification from '@/Components/Notification';
+import { usePage } from '@inertiajs/react';
+import TicketCount from '@/Components/TicketCount';
 
 // Display names for customer types
 const accountTypes = ['Commercial', 'Residential', 'Government'];
@@ -14,6 +16,8 @@ const customerTypeMap = {
 };
 
 const RateManagement = () => {
+  const { auth } = usePage().props;
+  const [profilePicture, setProfilePicture] = useState(null);
   const [activeTab, setActiveTab] = useState('Commercial');
   const [rates, setRates] = useState([]);
   const [form, setForm] = useState({ minimum_charge: '', rate_per_cu_m: '' });
@@ -24,6 +28,21 @@ const RateManagement = () => {
   useEffect(() => {
     fetchRates();
   }, [activeTab]);
+
+  useEffect(() => {
+    const fetchProfileData = async () => {
+      try {
+        const response = await axios.get('/api/admin/profile');
+        if (response.data?.success && response.data?.data?.profile_picture) {
+          setProfilePicture(response.data.data.profile_picture);
+        }
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+      }
+    };
+
+    fetchProfileData();
+  }, []);
 
   // Auto-hide notification after 3 seconds
   useEffect(() => {
@@ -160,7 +179,10 @@ const RateManagement = () => {
               </Link>
               <Link href="/admin/tickets" className={`flex items-center px-6 py-3 text-base ${window.location.pathname === '/admin/tickets' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                 <span className="material-symbols-outlined mr-3">confirmation_number</span>
-                Tickets
+                <div className="flex items-center">
+                    Tickets
+                    <TicketCount />
+                </div>
               </Link>
               <Link href="/admin/profile" className={`flex items-center px-6 py-3 text-base ${window.location.pathname === '/admin/profile' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                 <span className="material-symbols-outlined mr-3">person</span>
@@ -169,17 +191,8 @@ const RateManagement = () => {
             </div>
             <div className="flex-shrink-0">
               <button
-                onClick={async () => {
-                  if (window.confirm('Are you sure you want to log out?')) {
-                    try {
-                      await axios.get('/sanctum/csrf-cookie');
-                      await axios.post('/admin/logout');
-                      window.location.href = '/';
-                    } catch (error) {
-                      window.location.href = '/';
-                    }
-                  }
-                }}
+                data-logout="true"
+                type="button"
                 className="flex items-center px-6 py-3 text-base text-gray-600 hover:text-red-600 hover:bg-red-50 w-full text-left"
               >
                 <span className="material-symbols-outlined mr-3">logout</span>
@@ -190,7 +203,19 @@ const RateManagement = () => {
         </div>
 
         <div className="lg:ml-[240px] p-3 sm:p-4 md:p-6 lg:p-6 pt-16 lg:pt-6">
-          <h1 className="text-xl font-semibold mb-8">Rate Management</h1>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+            <h1 className="text-3xl font-bold text-gray-900">Rate Management</h1>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">{auth?.user?.name}</span>
+              <Link href="/admin/profile">
+                <img 
+                  src={profilePicture || `https://ui-avatars.com/api/?name=${auth?.user?.name || 'Admin'}&background=0D8ABC&color=fff`}
+                  alt="Profile" 
+                  className="w-10 h-10 rounded-full cursor-pointer hover:opacity-80 transition-opacity object-cover"
+                />
+              </Link>
+            </div>
+          </div>
           <div className="bg-white rounded-xl shadow-md p-10">
             {/* Notification */}
             {notification.show && (

@@ -9,6 +9,29 @@ use Illuminate\Support\Facades\Validator;
 
 class CustomerController extends Controller
 {
+    /**
+     * Get all customers for API
+     */
+    public function index()
+    {
+        try {
+            $customers = DB::table('customers_tb')
+                ->select('id', 'full_name', 'account_number', 'customer_type', 'address', 'contact_number', 'email', 'meter_number', 'created_at')
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $customers
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching customers: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -54,6 +77,36 @@ class CustomerController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error creating customer account: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get customer details by account number
+     */
+    public function getByAccountNumber($accountNumber)
+    {
+        try {
+            $customer = DB::table('customers_tb')
+                ->select('id', 'full_name', 'account_number', 'customer_type', 'address', 'contact_number', 'email', 'meter_number')
+                ->where('account_number', $accountNumber)
+                ->first();
+
+            if (!$customer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Customer not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $customer
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching customer details: ' . $e->getMessage()
             ], 500);
         }
     }

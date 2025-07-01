@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 
 class User extends Authenticatable
 {
@@ -50,7 +52,12 @@ class User extends Authenticatable
      */
     public function setPasswordAttribute($value)
     {
-        $this->attributes['password'] = $value;
+        // Only hash if the password isn't already hashed
+        if (strlen($value) < 60) {
+            $this->attributes['password'] = Hash::make($value);
+        } else {
+            $this->attributes['password'] = $value;
+        }
     }
 
     public function customer()
@@ -65,7 +72,10 @@ class User extends Authenticatable
 
     public function isStaff()
     {
-        return $this->staff !== null;
+        $username = explode('@', $this->email)[0];
+        return DB::table('staff_tb')
+            ->where('username', $username)
+            ->exists();
     }
 
     public function isCustomer()
@@ -76,7 +86,10 @@ class User extends Authenticatable
     public function getRole()
     {
         if ($this->isStaff()) {
-            return $this->staff->role;
+            $staff = DB::table('staff_tb')
+                ->where('username', explode('@', $this->email)[0])
+                ->first();
+            return $staff ? $staff->role : null;
         }
         if ($this->isCustomer()) {
             return 'customer';

@@ -1,29 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { Link, usePage } from '@inertiajs/react';
-import axios from 'axios';
+import api from '@/utils/api';
 
 const BillHandlerLayout = ({ children }) => {
     const { auth } = usePage().props;
     const [profilePicture, setProfilePicture] = useState(null);
     const [currentPath, setCurrentPath] = useState('');
 
+    const fetchProfileData = async () => {
+        try {
+            console.log('Fetching profile data for header...');
+            const response = await api.get('/bill-handler/profile');
+            if (response.data?.success && response.data?.data?.profile_picture) {
+                console.log('New profile picture URL:', response.data.data.profile_picture);
+                setProfilePicture(response.data.data.profile_picture);
+            }
+        } catch (error) {
+            console.error('Error fetching profile data:', error);
+        }
+    };
+
     useEffect(() => {
         setCurrentPath(window.location.pathname);
-        const fetchProfileData = async () => {
-            try {
-                const response = await axios.get('/api/bill-handler/profile');
-                if (response.data && response.data.profile_picture) {
-                    setProfilePicture(response.data.profile_picture);
-                }
-            } catch (error) {
-                // ignore error for now
-            }
-        };
         fetchProfileData();
+
+        // Set up periodic refresh
+        const interval = setInterval(fetchProfileData, 5000); // Refresh every 5 seconds
+
+        return () => clearInterval(interval);
     }, []);
 
-    const handleLogout = () => {
-        window.location.href = '/';
+    const getDefaultAvatarUrl = (name) => {
+        return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'Bill Handler')}&background=0D8ABC&color=fff`;
     };
 
     return (
@@ -39,17 +47,13 @@ const BillHandlerLayout = ({ children }) => {
                             <span className="material-symbols-outlined mr-3">dashboard</span>
                             Dashboard
                         </Link>
-                        <Link href="/bill-handler/billing" className={`flex items-center px-6 py-3 text-base ${currentPath === '/bill-handler/billing' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
-                            <span className="material-symbols-outlined mr-3">receipt_long</span>
-                            Billing
-                        </Link>
                         <Link href="/bill-handler/customers" className={`flex items-center px-6 py-3 text-base ${currentPath === '/bill-handler/customers' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                             <span className="material-symbols-outlined mr-3">group</span>
                             Customers
                         </Link>
-                        <Link href="/bill-handler/tickets" className={`flex items-center px-6 py-3 text-base ${currentPath === '/bill-handler/tickets' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
-                            <span className="material-symbols-outlined mr-3">confirmation_number</span>
-                            Tickets
+                        <Link href="/bill-handler/billing" className={`flex items-center px-6 py-3 text-base ${currentPath === '/bill-handler/billing' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                            <span className="material-symbols-outlined mr-3">receipt_long</span>
+                            Billing
                         </Link>
                         <Link href="/bill-handler/profile" className={`flex items-center px-6 py-3 text-base ${currentPath === '/bill-handler/profile' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                             <span className="material-symbols-outlined mr-3">person</span>
@@ -58,7 +62,7 @@ const BillHandlerLayout = ({ children }) => {
                     </div>
                     <div className="flex-shrink-0">
                         <button
-                            onClick={handleLogout}
+                            data-logout
                             className="flex items-center px-6 py-3 text-base text-gray-600 hover:text-red-600 hover:bg-red-50 w-full text-left"
                         >
                             <span className="material-symbols-outlined mr-3">logout</span>
@@ -84,13 +88,20 @@ const BillHandlerLayout = ({ children }) => {
                     <h1 className="text-xl font-semibold">
                         Bill Handler Dashboard
                     </h1>
-                    <Link href="/bill-handler/profile">
-                        <img 
-                            src={profilePicture || `https://ui-avatars.com/api/?name=${auth?.user?.name || 'Bill Handler'}&background=0D8ABC&color=fff`}
-                            alt="Profile" 
-                            className="w-10 h-10 rounded-full cursor-pointer hover:opacity-80 transition-opacity object-cover"
-                        />
-                    </Link>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">{auth?.user?.name}</span>
+                        <Link href="/bill-handler/profile">
+                            <img 
+                                src={profilePicture || getDefaultAvatarUrl(auth?.user?.name)}
+                                alt="Profile" 
+                                className="w-10 h-10 rounded-full cursor-pointer hover:opacity-80 transition-opacity object-cover"
+                                onError={(e) => {
+                                    console.log('Profile image load error:', e.target.src);
+                                    e.target.src = getDefaultAvatarUrl(auth?.user?.name);
+                                }}
+                            />
+                        </Link>
+                    </div>
                 </div>
 
                 {/* Page Content */}

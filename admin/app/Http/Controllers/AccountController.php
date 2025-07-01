@@ -414,6 +414,7 @@ class AccountController extends Controller
             $validated = $request->validate([
                 'first_name' => 'required|string|max:50',
                 'last_name' => 'required|string|max:50',
+                'username' => 'required|string|max:50|unique:customers_tb,username',
                 'email' => 'required|email|max:100|unique:customers_tb,email',
                 'password' => 'required|min:8|max:255',
                 'customer_type' => 'required|in:residential,commercial,government|max:20',
@@ -429,21 +430,16 @@ class AccountController extends Controller
             // Generate full_name from first_name and last_name
             $full_name = trim($validated['first_name'] . ' ' . $validated['last_name']);
 
-            // Generate username from email (everything before @)
-            $username = explode('@', $validated['email'])[0];
-            // Ensure username doesn't exceed 50 characters
-            $username = substr($username, 0, 50);
-
             // Insert into customers_tb
             $customerId = DB::table('customers_tb')->insertGetId([
                 'first_name' => $validated['first_name'],
                 'last_name' => $validated['last_name'],
                 'full_name' => $full_name,
-                'username' => $username,
+                'username' => $validated['username'],
                 'password' => $validated['password'],
                 'customer_type' => $validated['customer_type'],
                 'address' => $validated['address'],
-                'phone_number' => $validated['contact_number'], // Fix: use phone_number column
+                'phone_number' => $validated['contact_number'],
                 'email' => $validated['email'],
                 'account_number' => $validated['account_number'],
                 'meter_number' => $validated['meter_number'],

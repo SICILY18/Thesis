@@ -49,23 +49,10 @@ class Payment extends Model
     }
 
     /**
-     * Get the bill associated with the payment
+     * Get the bill being paid
      */
     public function bill()
     {
         return $this->belongsTo(Bill::class);
-    }
-
-    /**
-     * Verify if the payment details match the customer records
-     */
-    public function verifyCustomerDetails(): bool
-    {
-        if (!$this->customer) {
-            return false;
-        }
-
-        return $this->account_number === $this->customer->account_number &&
-               $this->meter_number === $this->customer->meter_number;
     }
 } 

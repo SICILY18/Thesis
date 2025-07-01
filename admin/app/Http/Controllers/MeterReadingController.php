@@ -27,6 +27,7 @@ class MeterReadingController extends Controller
                     'meter_readings.reading_date',
                     'meter_readings.created_at',
                     'meter_readings.staff_id',
+                    'customers_tb.id as customer_id',
                     'customers_tb.full_name as customer_name',
                     'customers_tb.account_number',
                     'customers_tb.customer_type'

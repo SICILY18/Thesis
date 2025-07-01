@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, usePage, router } from '@inertiajs/react';
-import axios from 'axios';
+import api from '@/utils/api';
 import DynamicTitleLayout from '@/Layouts/DynamicTitleLayout';
 import BillHandlerLayout from '@/Layouts/BillHandlerLayout';
 import AdminLayout from '@/Layouts/AdminLayout';
 
 // Configure axios defaults
-axios.defaults.withCredentials = true;
-axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
+api.defaults.withCredentials = true;
+api.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
 
 const Profile = () => {
     const { auth } = usePage().props;
@@ -25,13 +25,31 @@ const Profile = () => {
     const [isEditing, setIsEditing] = useState(false);
     const [previewImage, setPreviewImage] = useState(null);
     const [message, setMessage] = useState({ type: '', text: '' });
+    const [tempBlobUrl, setTempBlobUrl] = useState(null);
+
+    // Cleanup blob URL when component unmounts or when preview changes
+    useEffect(() => {
+        return () => {
+            if (tempBlobUrl) {
+                URL.revokeObjectURL(tempBlobUrl);
+            }
+        };
+    }, [tempBlobUrl]);
 
     // Determine user role and layout based on current path
     const isBillHandler = typeof window !== 'undefined' && window.location.pathname.startsWith('/bill-handler');
     const userRole = isBillHandler ? 'bill handler' : 'admin';
     const Layout = isBillHandler ? BillHandlerLayout : AdminLayout;
-    const apiEndpoint = isBillHandler ? '/api/bill-handler/profile' : '/api/admin/profile';
-    const updateEndpoint = isBillHandler ? '/api/bill-handler/profile/update' : '/api/admin/profile/update';
+    const apiEndpoint = isBillHandler ? '/bill-handler/profile' : '/admin/profile';
+    const updateEndpoint = isBillHandler ? '/bill-handler/profile/update' : '/admin/profile/update';
+
+    const initializeCSRF = async () => {
+        try {
+            await api.get('/sanctum/csrf-cookie');
+        } catch (error) {
+            console.error('Error getting CSRF cookie:', error);
+        }
+    };
 
     useEffect(() => {
         const initializeProfile = async () => {
@@ -39,8 +57,11 @@ const Profile = () => {
                 // Clear any existing messages
                 setMessage({ type: '', text: '' });
 
+                // Initialize CSRF protection
+                await initializeCSRF();
+
                 // Check authentication status
-                const authCheck = await axios.get('/api/check-auth');
+                const authCheck = await api.get('/check-auth');
                 if (!authCheck.data.authenticated) {
                     router.visit('/');
                     return;
@@ -70,28 +91,20 @@ const Profile = () => {
     }, [auth]);
 
     const fetchProfileData = async () => {
+        console.log('=== FETCHING PROFILE DATA ===');
         try {
-            const response = await axios.get(apiEndpoint);
+            // Ensure CSRF token is set before making request
+            await initializeCSRF();
             
-            // Handle different response formats
-            let data;
-            if (response.data.success !== undefined) {
-                // Response has success property (like BillHandlerController response)
-                if (response.data.success) {
-                    data = response.data.data || response.data;
-                } else {
-                    throw new Error(response.data.message || 'Failed to load profile data');
-                }
-            } else {
-                // Direct response (like AdminProfileController show response)
-                data = response.data;
-            }
-
-            console.log('Profile data received:', data);
-            setProfileData(data);
-            if (data.profile_picture) {
-                console.log('Setting preview image to:', data.profile_picture);
-                setPreviewImage(data.profile_picture);
+            const response = await api.get(apiEndpoint);
+            if (response.data?.success) {
+                const profileData = response.data.data;
+                setProfileData(prevData => ({
+                    ...prevData,
+                    ...profileData,
+                    profile_picture: profileData.profile_picture
+                }));
+                setPreviewImage(profileData.profile_picture);
             }
         } catch (error) {
             console.error('Error fetching profile:', error);
@@ -105,6 +118,18 @@ const Profile = () => {
             }
         }
     };
+
+    // Add effect to refresh profile data periodically
+    useEffect(() => {
+        // Only refresh if not in editing mode
+        if (!isEditing) {
+            const interval = setInterval(() => {
+                fetchProfileData();
+            }, 5000); // Refresh every 5 seconds
+
+            return () => clearInterval(interval);
+        }
+    }, [isEditing]);
 
     const handleImageChange = (e) => {
         console.log('=== IMAGE CHANGE DEBUG ===');
@@ -133,11 +158,17 @@ const Profile = () => {
             }
 
             console.log('File validation passed, updating state...');
-            const objectURL = URL.createObjectURL(file);
-            console.log('Created object URL:', objectURL);
             
+            // Cleanup old blob URL if exists
+            if (tempBlobUrl) {
+                URL.revokeObjectURL(tempBlobUrl);
+            }
+            
+            // Create new blob URL
+            const newBlobUrl = URL.createObjectURL(file);
+            setTempBlobUrl(newBlobUrl);
+            setPreviewImage(newBlobUrl);
             setProfileData({ ...profileData, profile_picture: file });
-            setPreviewImage(objectURL);
         } else {
             console.log('No file selected');
         }
@@ -155,11 +186,12 @@ const Profile = () => {
         console.log('Has profile picture file:', profileData.profile_picture instanceof File);
         
         try {
+            setMessage({ type: '', text: '' }); // Clear any existing messages
             const formData = new FormData();
             
             // Add all profile data to formData except password and profile_picture
             Object.keys(profileData).forEach(key => {
-                if (key !== 'password' && key !== 'profile_picture') {
+                if (key !== 'password' && key !== 'profile_picture' && profileData[key] !== null) {
                     console.log(`Adding to formData: ${key} = ${profileData[key]}`);
                     formData.append(key, profileData[key]);
                 }
@@ -178,7 +210,7 @@ const Profile = () => {
             }
 
             console.log(`Sending request to ${updateEndpoint}`);
-            const response = await axios.post(updateEndpoint, formData, {
+            const response = await api.post(updateEndpoint, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     'Accept': 'application/json',
@@ -191,6 +223,17 @@ const Profile = () => {
                 console.log('Profile update successful!');
                 setMessage({ type: 'success', text: response.data.message || 'Profile updated successfully!' });
                 setIsEditing(false);
+                
+                // Cleanup temporary blob URL
+                if (tempBlobUrl) {
+                    URL.revokeObjectURL(tempBlobUrl);
+                    setTempBlobUrl(null);
+                }
+                
+                // Update preview image if a new profile picture URL was returned
+                if (response.data.profile_picture) {
+                    setPreviewImage(response.data.profile_picture);
+                }
                 
                 // Refresh profile data
                 console.log('Fetching updated profile...');
@@ -210,10 +253,16 @@ const Profile = () => {
             console.error('Error object:', error);
             console.error('Response data:', error.response?.data);
             console.error('Response status:', error.response?.status);
+            
+            // Set error message with more detail
+            const errorMessage = error.response?.data?.message || error.message || 'Failed to update profile. Please try again.';
             setMessage({ 
                 type: 'error', 
-                text: error.response?.data?.message || 'Failed to update profile. Please try again.' 
+                text: errorMessage
             });
+            
+            // Keep editing mode active when there's an error
+            setIsEditing(true);
         }
     };
 

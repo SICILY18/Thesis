@@ -13,6 +13,7 @@ class VerifyCsrfToken extends Middleware
      */
     protected $except = [
         'api/bill-payment-validation/*/status',
+        'api/bill-payment-validation/*/validate',
         'api/admin-login',
         'api/admin-logout',
         'api/admin/profile/update',
@@ -26,5 +27,8 @@ class VerifyCsrfToken extends Middleware
         'api/tickets/*',
         'api/rates',
         'api/rates/*',
+        'api/invoices/*',
+        'api/invoices/generate',
+        'api/generate-invoice'
     ];
 }

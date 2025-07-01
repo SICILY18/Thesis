@@ -30,7 +30,7 @@ class Invoice extends Model
         'invoice_date' => 'date',
         'due_date' => 'date',
         'amount' => 'decimal:2',
-        'reading_value' => 'integer',
+        'reading_value' => 'decimal:2',
     ];
 
     // Relationship with Customer

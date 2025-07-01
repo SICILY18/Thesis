@@ -1,32 +1,79 @@
 import React, { useState, useEffect } from 'react';
 import { Link, usePage } from '@inertiajs/react';
-import { useLogout } from '@/Contexts/LogoutContext';
 import axios from 'axios';
+import ConfirmDialog from '@/Components/ConfirmDialog';
 
 const AdminLayout = ({ children }) => {
     const { auth } = usePage().props;
     const [profilePicture, setProfilePicture] = useState(null);
     const [currentPath, setCurrentPath] = useState('');
+    const [newTicketsCount, setNewTicketsCount] = useState(0);
+    const [viewedTickets, setViewedTickets] = useState(() => {
+        const saved = localStorage.getItem('viewedTickets');
+        return new Set(saved ? JSON.parse(saved) : []);
+    });
 
+    // Update current path in a separate useEffect
     useEffect(() => {
         setCurrentPath(window.location.pathname);
-        const fetchProfileData = async () => {
-            try {
-                const response = await axios.get('/api/admin/profile');
-                if (response.data && response.data.profile_picture) {
-                    setProfilePicture(response.data.profile_picture);
-                }
-            } catch (error) {
-                // ignore error for now
-            }
-        };
-        fetchProfileData();
-    }, []);
+    }, [window.location.pathname]);
 
-    const handleLogout = () => {
-        // For now, just redirect to logout
-        window.location.href = '/';
+    const fetchProfileData = async () => {
+        try {
+            console.log('Fetching profile data for header...');
+            const response = await axios.get('/api/admin/profile');
+            if (response.data?.success && response.data?.data?.profile_picture) {
+                console.log('New profile picture URL:', response.data.data.profile_picture);
+                setProfilePicture(response.data.data.profile_picture);
+            }
+        } catch (error) {
+            console.error('Error fetching profile data:', error);
+        }
     };
+
+    const fetchNewTicketsCount = async () => {
+        try {
+            const response = await axios.get('/admin/tickets/data');
+            if (response.data.success) {
+                // Get viewed tickets from localStorage
+                const savedViewedTickets = new Set(JSON.parse(localStorage.getItem('viewedTickets') || '[]'));
+                
+                // Only count tickets that are 'open' and haven't been viewed
+                const openTickets = response.data.data.filter(ticket => {
+                    const isOpen = ticket.status.toLowerCase() === 'open';
+                    const isUnviewed = !savedViewedTickets.has(ticket.ticket_id);
+                    return isOpen && isUnviewed;
+                });
+                setNewTicketsCount(openTickets.length);
+
+                // Update viewed tickets for non-open tickets
+                const newViewedTickets = new Set(savedViewedTickets);
+                response.data.data.forEach(ticket => {
+                    if (ticket.status.toLowerCase() !== 'open') {
+                        newViewedTickets.add(ticket.ticket_id);
+                    }
+                });
+                localStorage.setItem('viewedTickets', JSON.stringify([...newViewedTickets]));
+                setViewedTickets(newViewedTickets);
+            }
+        } catch (error) {
+            console.error('Error fetching new tickets count:', error);
+        }
+    };
+
+    // Separate useEffect for data fetching without currentPath dependency
+    useEffect(() => {
+        fetchProfileData();
+        fetchNewTicketsCount();
+
+        const profileInterval = setInterval(fetchProfileData, 5000);
+        const ticketsInterval = setInterval(fetchNewTicketsCount, 5000);
+
+        return () => {
+            clearInterval(profileInterval);
+            clearInterval(ticketsInterval);
+        };
+    }, []); // Removed currentPath dependency
 
     return (
         <div className="min-h-screen bg-[#60B5FF] font-[Poppins] overflow-x-hidden">
@@ -63,7 +110,14 @@ const AdminLayout = ({ children }) => {
                         </Link>
                         <Link href="/admin/tickets" className={`flex items-center px-6 py-3 text-base ${currentPath === '/admin/tickets' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                             <span className="material-symbols-outlined mr-3">confirmation_number</span>
-                            Tickets
+                            <div className="flex items-center">
+                                Tickets
+                                {newTicketsCount > 0 && (
+                                    <span className="ml-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                                        {newTicketsCount}
+                                    </span>
+                                )}
+                            </div>
                         </Link>
                         <Link href="/admin/profile" className={`flex items-center px-6 py-3 text-base ${currentPath === '/admin/profile' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                             <span className="material-symbols-outlined mr-3">person</span>
@@ -72,7 +126,8 @@ const AdminLayout = ({ children }) => {
                     </div>
                     <div className="flex-shrink-0">
                         <button
-                            onClick={handleLogout}
+                            data-logout="true"
+                            type="button"
                             className="flex items-center px-6 py-3 text-base text-gray-600 hover:text-red-600 hover:bg-red-50 w-full text-left"
                         >
                             <span className="material-symbols-outlined mr-3">logout</span>
@@ -95,16 +150,31 @@ const AdminLayout = ({ children }) => {
             <div className="lg:ml-[240px] p-3 sm:p-4 md:p-6 lg:p-6 pt-16 lg:pt-6">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
-                    <h1 className="text-xl font-semibold">
-                        {currentPath === '/admin/accounts' ? 'Manage Accounts' : 'Admin Dashboard'}
+                    <h1 className="text-3xl font-bold text-gray-900">
+                        {currentPath === '/admin/dashboard' ? 'Dashboard' :
+                         currentPath === '/admin/announcement' ? 'Announcement' :
+                         currentPath === '/admin/accounts' ? 'Manage Accounts' :
+                         currentPath === '/admin/rate-management' ? 'Rate Management' :
+                         currentPath === '/admin/payment' ? 'Payment Management' :
+                         currentPath === '/admin/reports' ? 'Reports' :
+                         currentPath === '/admin/tickets' ? 'Tickets' :
+                         currentPath === '/admin/profile' ? 'Profile' :
+                         'Admin Dashboard'}
                     </h1>
-                    <Link href="/admin/profile">
-                        <img 
-                            src={profilePicture || `https://ui-avatars.com/api/?name=${auth?.user?.name || 'Admin'}&background=0D8ABC&color=fff`}
-                            alt="Profile" 
-                            className="w-10 h-10 rounded-full cursor-pointer hover:opacity-80 transition-opacity object-cover"
-                        />
-                    </Link>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">{auth?.user?.name}</span>
+                        <Link href="/admin/profile">
+                            <img 
+                                src={profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(auth?.user?.name || 'Admin')}&background=0D8ABC&color=fff`}
+                                alt="Profile" 
+                                className="w-10 h-10 rounded-full cursor-pointer hover:opacity-80 transition-opacity object-cover"
+                                onError={(e) => {
+                                    console.log('Profile image load error:', e.target.src);
+                                    e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(auth?.user?.name || 'Admin')}&background=0D8ABC&color=fff`;
+                                }}
+                            />
+                        </Link>
+                    </div>
                 </div>
 
                 {/* Page Content */}

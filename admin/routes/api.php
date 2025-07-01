@@ -11,6 +11,7 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\RateController;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PaymentHistoryController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\BillPaymentValidationController;
 use App\Http\Controllers\InvoiceController;
@@ -30,40 +31,47 @@ use App\Http\Controllers\BillingCycleController;
 
 // Public routes
 Route::post('/admin-login', [AdminAuthController::class, 'login']);
-Route::post('/admin-logout', [AdminAuthController::class, 'logout']);
+Route::post('/admin-logout', [AdminAuthController::class, 'logout'])->middleware(['web']);
+Route::get('/sanctum/csrf-cookie', function () {
+    return response()->json(['message' => 'CSRF cookie set']);
+});
 Route::get('/check-auth', [AdminAuthController::class, 'checkAuth'])->middleware(['web']);
 Route::post('/create-staff', [AdminAuthController::class, 'createStaff']);
+
+// Debug route for tickets
+Route::get('/debug-tickets', function () {
+    try {
+        $supabase = app(App\Services\SupabaseService::class);
+        $result = $supabase->query('tickets_tb', '*', [
+            'order' => 'created_at.desc'
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'supabase_response' => $result,
+            'config' => [
+                'url_set' => !empty(config('supabase.url')),
+                'service_key_set' => !empty(config('supabase.service_role_key')),
+                'anon_key_set' => !empty(config('supabase.anon_key'))
+            ]
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
 
 // Temporary public routes (for testing)
 Route::get('/meter-readings', [MeterReadingController::class, 'index']);
 
-// Protected routes
-Route::middleware(['web'])->group(function () {
-    Route::get('/user', function (Request $request) {
-        return $request->user();
-    });
-
-    // Admin Profile Routes
-    Route::get('/admin/profile', [AdminProfileController::class, 'show']);
-    Route::post('/admin/profile/update', [AdminProfileController::class, 'update']);
-
-    // Account Management Routes  
-    Route::prefix('accounts')->group(function () {
-        Route::get('/', [AccountController::class, 'listAccounts']);
-        Route::post('/staff', [AccountController::class, 'createStaffAccount']);
-        Route::put('/staff/{id}', [AccountController::class, 'updateStaff']);
-        Route::delete('/staff/{id}', [AccountController::class, 'deleteStaff']);
-        Route::post('/customer', [AccountController::class, 'createCustomer']); // Use the newer createCustomer method
-        Route::put('/customer/{id}', [AccountController::class, 'updateCustomer']);
-        Route::delete('/customer/{id}', [AccountController::class, 'deleteCustomer']);
-    });
-
     // Bill Handler Routes
-    Route::prefix('bill-handler')->group(function () {
+    Route::middleware(['web', 'bill.handler'])->group(function () {
         Route::get('/bill-handler-dashboard', [BillHandlerController::class, 'BillHandlerDashboard']);
-        Route::get('/customers', [BillHandlerController::class, 'getCustomers']);
-        Route::get('/profile', [BillHandlerController::class, 'getProfile']);
-        Route::post('/profile/update', [BillHandlerController::class, 'updateProfile']);
+    Route::get('/bill-handler/profile', [BillHandlerController::class, 'getProfile']);
+    Route::post('/bill-handler/profile/update', [BillHandlerController::class, 'updateProfile']);
         
         // Debug route for profile issues
         Route::get('/debug-profile', function() {
@@ -137,6 +145,27 @@ Route::middleware(['web'])->group(function () {
                 ]);
             }
         });
+});
+
+// Protected routes
+Route::middleware(['web', 'admin.auth'])->group(function () {
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
+
+    // Admin Profile Routes
+    Route::get('/admin/profile', [AdminProfileController::class, 'show'])->middleware('web');
+    Route::post('/admin/profile/update', [AdminProfileController::class, 'update'])->middleware('web');
+
+    // Account Management Routes  
+    Route::prefix('accounts')->group(function () {
+        Route::get('/', [AccountController::class, 'listAccounts']);
+        Route::post('/staff', [AccountController::class, 'createStaffAccount']);
+        Route::put('/staff/{id}', [AccountController::class, 'updateStaff']);
+        Route::delete('/staff/{id}', [AccountController::class, 'deleteStaff']);
+        Route::post('/customer', [AccountController::class, 'createCustomer']);
+        Route::put('/customer/{id}', [AccountController::class, 'updateCustomer']);
+        Route::delete('/customer/{id}', [AccountController::class, 'deleteCustomer']);
     });
 
     // Rate Management Routes
@@ -159,28 +188,34 @@ Route::middleware(['web'])->group(function () {
         Route::post('/{id}/approve', [PaymentController::class, 'approve']);
     });
 
+    // Payment History Routes
+    Route::prefix('payment-history')->group(function () {
+        Route::get('/', [PaymentHistoryController::class, 'index']);
+        Route::get('/stats', [PaymentHistoryController::class, 'getStats']);
+        Route::get('/{accountNumber}', [PaymentHistoryController::class, 'getCustomerHistory']);
+    });
+
     // Ticket Routes
     Route::prefix('tickets')->group(function () {
         Route::get('/', [TicketController::class, 'index']);
         Route::patch('/{id}', [TicketController::class, 'update']);
     });
 
-    // Bill Payment Validation Routes
-    Route::get('/bill-payment-validation', [BillPaymentValidationController::class, 'index']);
-    Route::patch('/bill-payment-validation/{id}/status', [BillPaymentValidationController::class, 'updateStatus']);
-
     // Invoice Routes
     Route::prefix('invoices')->group(function () {
         Route::get('/', [InvoiceController::class, 'index']);
         Route::post('/', [InvoiceController::class, 'store']);
         Route::post('/bulk-generate', [InvoiceController::class, 'bulkGenerate']);
+        Route::post('/generate', [InvoiceController::class, 'generateFromReading'])->withoutMiddleware(['verify_csrf_token']);
         Route::get('/{invoice}', [InvoiceController::class, 'show']);
         Route::put('/{invoice}', [InvoiceController::class, 'update']);
         Route::delete('/{invoice}', [InvoiceController::class, 'destroy']);
+        Route::get('/{invoiceId}/download', [InvoiceController::class, 'downloadPdf']);
     });
 
     // Get customers for invoice generation
     Route::get('/customers', [CustomerController::class, 'index']);
+    Route::get('/customers/{accountNumber}', [CustomerController::class, 'getByAccountNumber']);
 
     // Meter Reading Routes
     Route::prefix('meter-readings')->group(function () {
@@ -266,6 +301,16 @@ Route::middleware(['web'])->group(function () {
             ]);
         }
     });
+
+    // Bill Payment Validation Routes
+    Route::prefix('bill-payment-validation')->group(function () {
+        Route::get('/', [BillPaymentValidationController::class, 'index']);
+        Route::post('/{id}/validate', [BillPaymentValidationController::class, 'validatePayment'])
+            ->middleware(['web', \App\Http\Middleware\VerifyCsrfToken::class]);
+        Route::put('/{id}/status', [BillPaymentValidationController::class, 'updateStatus']);
+        Route::get('/customer/{accountNumber}', [BillPaymentValidationController::class, 'getByCustomer']);
+        Route::get('/stats', [BillPaymentValidationController::class, 'getStats']);
+    });
 });
 
 // Temporary debug routes
@@ -302,6 +347,12 @@ Route::get('/debug/check-meter-readings', function() {
         ]);
     }
 });
+
+// Additional API routes for BillHandlerBilling (no middleware for easy access)
+Route::get('/bills', [BillPaymentValidationController::class, 'index']); // Use same as bill-payment-validation
+Route::get('/billing-cycles', [BillingCycleController::class, 'index']);
+Route::get('/rates', [RateController::class, 'index']);
+Route::get('/billing-history', [PaymentHistoryController::class, 'index']); // Use payment history data
 
 
 

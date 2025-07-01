@@ -1,1344 +1,995 @@
 import React, { useState, useEffect } from 'react';
 import BillHandlerLayout from '@/Layouts/BillHandlerLayout';
-import DynamicTitleLayout from '@/Layouts/DynamicTitleLayout';
-import dayjs from 'dayjs';
+import axios from 'axios';
+import { router } from '@inertiajs/react';
 
-const billingFeatures = [
-  {
-    key: 'invoice-generation',
-    title: 'Invoice Generation',
-    description: 'Generate invoices for customers based on their meter readings and consumption.',
-  },
-  {
-    key: 'bill-generation',
-    title: 'Bill Payment Validation',
-    description: 'Validate and confirm customer payments for generated bills.',
-  },
-  {
-    key: 'billing-cycles',
-    title: 'Billing Cycles',
-    description: 'View and manage the billing cycle of each customer.',
-  },
-  {
-    key: 'rate-management',
-    title: 'Rate Management',
-    description: 'Water rates, penalty rates, service charges',
-  },
-  {
-    key: 'billing-history',
-    title: 'Billing History',
-    description: 'Track all generated bills by date/period',
-  },
-];
-
-const mockCycles = [
-  {
-    id: 1,
-    customer: 'John Doe',
-    accountNumber: '12001234',
-    accountType: 'Residential',
-    billingPeriod: '2024-06',
-    cycleDate: '2024-06-01',
-    meterReadingDate: '2024-06-01',
-    prevReading: 100,
-    currReading: 120,
-    consumption: 20,
-    rate: 25,
-    totalAmount: 500,
-    billGenerated: '2024-06-02',
-    dueDate: '2024-06-15',
-    paymentStatus: 'Unpaid',
-    remarks: 'No issues',
-  },
-  {
-    id: 2,
-    customer: 'Jane Smith',
-    accountNumber: '23004567',
-    accountType: 'Commercial',
-    billingPeriod: '2024-06',
-    cycleDate: '2024-06-01',
-    meterReadingDate: '2024-06-01',
-    prevReading: 200,
-    currReading: 250,
-    consumption: 50,
-    rate: 30,
-    totalAmount: 1500,
-    billGenerated: '2024-06-02',
-    dueDate: '2024-06-15',
-    paymentStatus: 'Paid',
-    remarks: 'Paid on time',
-  },
-  {
-    id: 3,
-    customer: 'Gov Office',
-    accountNumber: '31006789',
-    accountType: 'Government',
-    billingPeriod: '2024-06',
-    cycleDate: '2024-06-01',
-    meterReadingDate: '2024-06-01',
-    prevReading: 300,
-    currReading: 320,
-    consumption: 20,
-    rate: 40,
-    totalAmount: 800,
-    billGenerated: '2024-06-02',
-    dueDate: '2024-06-15',
-    paymentStatus: 'Unpaid',
-    remarks: '',
-  },
-];
-
-const mockHistory = [
-  {
-    id: 1,
-    customer: 'John Doe',
-    accountNumber: '12001234',
-    accountType: 'Residential',
-    billingPeriod: '2024-06',
-    billDate: '2024-06-02',
-    dueDate: '2024-06-15',
-    amount: 500,
-    paymentStatus: 'Unpaid',
-    paymentDate: '',
-    paymentMethod: '',
-    reference: '',
-    remarks: 'No issues',
-  },
-  {
-    id: 2,
-    customer: 'Jane Smith',
-    accountNumber: '23004567',
-    accountType: 'Commercial',
-    billingPeriod: '2024-06',
-    billDate: '2024-06-02',
-    dueDate: '2024-06-15',
-    amount: 1500,
-    paymentStatus: 'Paid',
-    paymentDate: '2024-06-10',
-    paymentMethod: 'Online',
-    reference: 'PMI1234567',
-    remarks: 'Paid on time',
-  },
-  {
-    id: 3,
-    customer: 'Gov Office',
-    accountNumber: '31006789',
-    accountType: 'Government',
-    billingPeriod: '2024-05',
-    billDate: '2024-05-02',
-    dueDate: '2024-05-15',
-    amount: 800,
-    paymentStatus: 'Paid',
-    paymentDate: '2024-05-10',
-    paymentMethod: 'Cash',
-    reference: 'PMI7654321',
-    remarks: '',
-  },
-];
-
-const mockCustomers = [
-  {
-    id: 1,
-    name: 'John Doe',
-    accountNumber: '12001234',
-    accountType: 'Residential',
-    address: '123 Main St, City',
-    contact: '09171234567',
-    email: 'john@example.com',
-    status: 'Active',
-    billingStatus: 'Unpaid',
-  },
-  {
-    id: 2,
-    name: 'Jane Smith',
-    accountNumber: '23004567',
-    accountType: 'Commercial',
-    address: '456 Commerce Ave, City',
-    contact: '09179876543',
-    email: 'jane@example.com',
-    status: 'Active',
-    billingStatus: 'Paid',
-  },
-  {
-    id: 3,
-    name: 'Gov Office',
-    accountNumber: '31006789',
-    accountType: 'Government',
-    address: '789 Gov Rd, City',
-    contact: '09170001122',
-    email: 'gov@example.com',
-    status: 'Inactive',
-    billingStatus: 'Overdue',
-  },
-];
-
-function formatAccountNumber(num) {
-  const str = num.toString().padStart(8, '0');
-  return str.slice(0, 2) + '-' + str.slice(2);
-}
-
-const cycleReasons = [
-  'System Maintenance or Downtime',
-  'Customer-Requested Adjustment',
-  'New Connection or Account Transfer',
-  'Other',
-];
-
-function formatDate(dateStr) {
-  if (!dateStr) return '-';
-  return dayjs(dateStr).format('MM-DD-YYYY');
-}
+// Configure axios defaults
+axios.defaults.withCredentials = true;
+axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
 
 const BillHandlerBilling = () => {
-  const [activeTab, setActiveTab] = useState(billingFeatures[0].key);
-  const [accountType, setAccountType] = useState('All');
+  const [activeTab, setActiveTab] = useState('invoice-generation');
+  
+  // State for each tab's data
+  const [meterReadings, setMeterReadings] = useState([]);
+  const [bills, setBills] = useState([]);
+  const [billingCycles, setBillingCycles] = useState([]);
+  const [rates, setRates] = useState([]);
+  const [billingHistory, setBillingHistory] = useState([]);
+  
+  // Loading states
+  const [loadingReadings, setLoadingReadings] = useState(false);
+  const [loadingBills, setLoadingBills] = useState(false);
+  const [loadingCycles, setLoadingCycles] = useState(false);
+  const [loadingRates, setLoadingRates] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  
+  // Filter states
+  const [staffFilter, setStaffFilter] = useState('All Staff');
+  const [accountTypeFilter, setAccountTypeFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [billingPeriod, setBillingPeriod] = useState('2024-06');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [bills, setBills] = useState([]);
-  const [loading, setLoading] = useState(false);
 
-  const [cycleAccountType, setCycleAccountType] = useState('All');
-  const [cyclePeriod, setCyclePeriod] = useState('');
-  const [cycles, setCycles] = useState([]);
-  const [cycleSearch, setCycleSearch] = useState('');
-  const [cycleLoading, setCycleLoading] = useState(false);
-  const [selectedCycle, setSelectedCycle] = useState(null);
-  const [showCycleDetailsModal, setShowCycleDetailsModal] = useState(false);
+  // Additional states for Payment Details Modal
+  const [selectedPayment, setSelectedPayment] = useState(null);
+  const [adminNotes, setAdminNotes] = useState('');
+  const [selectedBillingCycle, setSelectedBillingCycle] = useState(null);
+  const [stats, setStats] = useState({
+    total_amount: 0,
+    pending_count: 0,
+    partial_count: 0
+  });
 
-  const [historyAccountType, setHistoryAccountType] = useState('All');
-  const [historyPeriod, setHistoryPeriod] = useState('');
-  const [historySearch, setHistorySearch] = useState('');
-  const [history, setHistory] = useState(mockHistory);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [selectedHistory, setSelectedHistory] = useState(null);
+  useEffect(() => {
+    // Set up CSRF token
+    const setupCsrf = async () => {
+      try {
+        // Get CSRF cookie
+        await axios.get('/sanctum/csrf-cookie');
+        
+        // Get CSRF token from meta tag
+        const token = document.querySelector('meta[name="csrf-token"]');
+        if (token) {
+          axios.defaults.headers.common['X-CSRF-TOKEN'] = token.getAttribute('content');
+        }
+      } catch (error) {
+        console.error('Error setting up CSRF:', error);
+      }
+    };
 
-  const [customerAccountType, setCustomerAccountType] = useState('All');
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [customers, setCustomers] = useState(mockCustomers);
-  const [showCustomerModal, setShowCustomerModal] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
+    setupCsrf();
 
-  const [showBillDetailsModal, setShowBillDetailsModal] = useState(false);
-  const [selectedBill, setSelectedBill] = useState(null);
+    // Fetch data
+    fetchMeterReadings();
+    fetchBills();
+    fetchBillingCycles();
+    fetchRates();
+    fetchBillingHistory();
+    fetchStats();
+  }, []);
 
-  // Invoice Generation states (simplified meter readings)
-  const [meterReadings, setMeterReadings] = useState([]);
-  const [readingSearch, setReadingSearch] = useState('');
-  const [readingStatusFilter, setReadingStatusFilter] = useState('All');
-  const [readingLoading, setReadingLoading] = useState(false);
-  const [showReadingModal, setShowReadingModal] = useState(false);
-  const [selectedReading, setSelectedReading] = useState(null);
-  const [selectedReadings, setSelectedReadings] = useState([]);
-  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
-  const [invoiceData, setInvoiceData] = useState(null);
-  const [loadingInvoiceId, setLoadingInvoiceId] = useState(null);
-
-  const currentFeature = billingFeatures.find(f => f.key === activeTab);
-
-  // Fetch bills from API (moved outside useEffect for reuse)
-  const fetchBills = async () => {
-    setLoading(true);
+  const fetchMeterReadings = async () => {
+    setLoadingReadings(true);
     try {
-      let url = '/api/bill-payment-validation?';
-      url += `account_type=${accountType}&status=${statusFilter}&period=${billingPeriod}&search=${searchTerm}`;
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        setBills(Array.isArray(data) ? data : []);
+      const response = await axios.get('/api/meter-readings');
+      setMeterReadings(response.data.data || response.data || []);
+    } catch (error) {
+      console.error('Error fetching meter readings:', error);
+      setMeterReadings([]);
+    } finally {
+      setLoadingReadings(false);
+    }
+  };
+
+  const fetchBills = async () => {
+    setLoadingBills(true);
+    try {
+      const response = await axios.get('/api/payment-history');
+      if (response.data.success) {
+        setBills(response.data.data || []);
       } else {
         setBills([]);
       }
-    } catch (err) {
+    } catch (error) {
+      console.error('Error fetching payment history:', error);
       setBills([]);
     } finally {
-      setLoading(false);
+      setLoadingBills(false);
     }
   };
 
-  // Fetch meter readings from API (simplified)
-  const fetchMeterReadings = async () => {
-    setReadingLoading(true);
-    try {
-      const response = await fetch('/api/meter-readings');
-      if (response.ok) {
-        const data = await response.json();
-        setMeterReadings(Array.isArray(data.data) ? data.data : []);
-      } else {
-        setMeterReadings([]);
-      }
-    } catch (err) {
-      setMeterReadings([]);
-    } finally {
-      setReadingLoading(false);
-    }
-  };
-
-  // Fetch billing cycles from API
   const fetchBillingCycles = async () => {
-    setCycleLoading(true);
+    setLoadingCycles(true);
     try {
-      // First, automatically sync all customers to billing cycles
-      const syncResponse = await fetch('/api/billing-cycles/create-for-all-customers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-        }
-      });
-
-      if (syncResponse.ok) {
-        const syncResult = await syncResponse.json();
-        console.log('Auto-sync result:', syncResult);
-      }
-
-      // Then fetch the billing cycles
-      let url = '/api/billing-cycles?';
-      const params = new URLSearchParams({
-        account_type: cycleAccountType,
-        billing_period: cyclePeriod,
-        search: cycleSearch
-      });
-      url += params.toString();
-
-      const response = await fetch(url);
-      console.log('Billing cycles response status:', response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Billing cycles data:', data);
-        setCycles(Array.isArray(data) ? data : []);
-      } else {
-        console.error('HTTP error:', response.status, response.statusText);
-        setCycles([]);
-      }
-    } catch (err) {
-      console.error('Fetch error:', err);
-      setCycles([]);
+      const response = await axios.get('/api/billing-cycles');
+      setBillingCycles(response.data || []);
+    } catch (error) {
+      console.error('Error fetching billing cycles:', error);
+      setBillingCycles([]);
     } finally {
-      setCycleLoading(false);
+      setLoadingCycles(false);
     }
   };
 
-  useEffect(() => {
-    fetchBills();
-    // eslint-disable-next-line
-  }, [accountType, statusFilter, billingPeriod, searchTerm]);
-
-  useEffect(() => {
-    if (activeTab === 'invoice-generation') {
-      fetchMeterReadings();
-    }
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (activeTab === 'invoice-generation') {
-      fetchMeterReadings();
-    }
-    // eslint-disable-next-line
-  }, [readingSearch, readingStatusFilter]);
-
-  useEffect(() => {
-    if (activeTab === 'billing-cycles') {
-      fetchBillingCycles();
-    }
-    // eslint-disable-next-line
-  }, [activeTab, cycleAccountType, cyclePeriod, cycleSearch]);
-
-  // Defensive rendering for bills
-  if (loading) {
-    return <div className="w-full text-center py-10 text-lg font-semibold text-blue-600">Loading billing data...</div>;
-  }
-  if (!Array.isArray(bills)) {
-    return <div>Error: Bills data is not an array.</div>;
-  }
-
-  // Filter bills based on account type, search, period, and status
-  const filteredBills = bills.filter(bill => {
-    const matchesType = accountType === 'All' || bill.account_type === accountType;
-    const matchesSearch =
-      bill.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      formatAccountNumber(bill.account_number).includes(searchTerm);
-    const matchesStatus = statusFilter === 'All' || bill.status === statusFilter;
-    const matchesPeriod = billingPeriod === '' || bill.period === billingPeriod;
-    return matchesType && matchesSearch && matchesStatus && matchesPeriod;
-  });
-
-  const filteredCycles = cycles.filter(cycle => {
-    const matchesType = cycleAccountType === 'All' || cycle.account_type === cycleAccountType;
-    const matchesPeriod = cyclePeriod === '' || (cycle.billing_start_date && cycle.billing_start_date.slice(0, 7) === cyclePeriod);
-    const matchesSearch =
-      (cycle.customer && cycle.customer.toLowerCase().includes(cycleSearch.toLowerCase())) ||
-      (cycle.account_number && formatAccountNumber(cycle.account_number).includes(cycleSearch));
-    return matchesType && matchesPeriod && matchesSearch;
-  });
-
-  const filteredHistory = history.filter(row => {
-    const matchesType = historyAccountType === 'All' || row.accountType === historyAccountType;
-    const matchesPeriod = historyPeriod === '' || row.billingPeriod === historyPeriod;
-    const matchesSearch =
-      row.customer.toLowerCase().includes(historySearch.toLowerCase()) ||
-      formatAccountNumber(row.accountNumber).includes(historySearch);
-    return matchesType && matchesPeriod && matchesSearch;
-  });
-
-  const filteredCustomers = customers.filter(cust => {
-    const matchesType = customerAccountType === 'All' || cust.accountType === customerAccountType;
-    const matchesSearch =
-      cust.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-      formatAccountNumber(cust.accountNumber).includes(customerSearch);
-    return matchesType && matchesSearch;
-  });
-
-  // Filter meter readings based on search and staff
-  const filteredMeterReadings = meterReadings.filter(reading => {
-    const matchesSearch = !readingSearch || 
-      reading.meter_number?.toLowerCase().includes(readingSearch.toLowerCase()) ||
-      reading.id?.toString().includes(readingSearch) ||
-      reading.remarks?.toLowerCase().includes(readingSearch.toLowerCase()) ||
-      reading.staff_id?.toString().includes(readingSearch);
-    const matchesStaff = readingStatusFilter === 'All' || reading.staff_id?.toString() === readingStatusFilter;
-    return matchesSearch && matchesStaff;
-  });
-
-  // Actions
-  const handleConfirm = async (id) => {
-    if (window.confirm('Are you sure you want to confirm this payment?')) {
-      console.log('Sending PATCH request for id:', id);
-      // Get CSRF cookie first
-      await fetch('/sanctum/csrf-cookie', { credentials: 'include' });
-      const response = await fetch(`/api/bill-payment-validation/${id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ status: 'Confirmed' })
-      });
-      console.log('PATCH response status:', response.status);
-      if (response.ok) {
-        fetchBills();
-      } else {
-        let error = '';
-        try {
-          error = await response.json();
-        } catch (e) {
-          error = response.statusText;
-        }
-        alert('Failed to confirm: ' + (error.message || response.status));
-        console.error('API error:', error);
-      }
-    }
-  };
-  const handleReject = async (id) => {
-    if (window.confirm('Are you sure you want to reject this payment?')) {
-      console.log('Sending PATCH request for id:', id);
-      // Get CSRF cookie first
-      await fetch('/sanctum/csrf-cookie', { credentials: 'include' });
-      const response = await fetch(`/api/bill-payment-validation/${id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ status: 'Rejected' })
-      });
-      console.log('PATCH response status:', response.status);
-      if (response.ok) {
-        fetchBills();
-      } else {
-        let error = '';
-        try {
-          error = await response.json();
-        } catch (e) {
-          error = response.statusText;
-        }
-        alert('Failed to reject: ' + (error.message || response.status));
-        console.error('API error:', error);
-      }
-    }
-  };
-
-  // Count for summary
-  const pendingCount = bills.filter(b => b.status === 'Pending Validation').length;
-  const unpaidCount = bills.filter(b => b.status === 'Unpaid').length;
-
-  function openHistoryModal(row) {
-    setSelectedHistory(row);
-    setShowHistoryModal(true);
-  }
-
-  function openCustomerModal(cust) {
-    setSelectedCustomer(cust);
-    setShowCustomerModal(true);
-  }
-
-  function openBillDetailsModal(bill) {
-    setSelectedBill(bill);
-    setShowBillDetailsModal(true);
-  }
-
-  function openCycleDetailsModal(cycle) {
-    setSelectedCycle(cycle);
-    setShowCycleDetailsModal(true);
-  }
-
-  function openReadingModal(reading) {
-    setSelectedReading(reading);
-    setShowReadingModal(true);
-  }
-
-  function handleSelectReading(readingId) {
-    setSelectedReadings(prev => {
-      if (prev.includes(readingId)) {
-        return prev.filter(id => id !== readingId);
-      } else {
-        return [...prev, readingId];
-      }
-    });
-  }
-
-  function handleSelectAllReadings() {
-    if (selectedReadings.length === filteredMeterReadings.length) {
-      setSelectedReadings([]);
-    } else {
-      setSelectedReadings(filteredMeterReadings.map(r => r.id));
-    }
-  }
-
-  function handleGenerateInvoicesFromReadings() {
-    if (selectedReadings.length === 0) {
-      alert('Please select at least one meter reading to generate invoices.');
-      return;
-    }
-    if (window.confirm(`Generate invoices for ${selectedReadings.length} selected meter readings?`)) {
-      // TODO: Implement bulk invoice generation from meter readings
-      console.log('Generating invoices for readings:', selectedReadings);
-      alert('Bulk invoice generation functionality will be implemented.');
-      setSelectedReadings([]);
-    }
-  }
-
-  // Generate invoice for single meter reading
-  async function handleGenerateInvoice(readingId) {
-    setLoadingInvoiceId(readingId);
+  const fetchRates = async () => {
+    setLoadingRates(true);
     try {
-      const response = await fetch(`/api/meter-readings/${readingId}/with-customer`);
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Invoice API result:', result);
-        if (result.success && result.data) {
-          setInvoiceData(result.data);
-          setShowInvoiceModal(true);
-        } else {
-          alert(result.message || 'Failed to fetch invoice data');
-        }
-      } else {
-        const errorText = await response.text();
-        alert(`Failed to fetch customer data. Status: ${response.status}. Error: ${errorText}`);
+      const response = await axios.get('/api/rates');
+      setRates(response.data.data || response.data || []);
+    } catch (error) {
+      console.error('Error fetching rates:', error);
+      setRates([]);
+    } finally {
+      setLoadingRates(false);
+    }
+  };
+
+  const fetchBillingHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const response = await axios.get('/api/billing-history');
+      setBillingHistory(response.data.data || response.data || []);
+    } catch (error) {
+      console.error('Error fetching billing history:', error);
+      setBillingHistory([]);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const response = await axios.get('/api/payment-history/stats');
+      if (response.data.success) {
+        setStats(response.data.data);
       }
     } catch (error) {
-      alert('Error generating invoice. Please try again.');
-    } finally {
-      setLoadingInvoiceId(null);
+      console.error('Error fetching stats:', error);
     }
-  }
+  };
 
-  // Format date for invoice
-  function formatInvoiceDate(dateStr) {
-    if (!dateStr) return new Date().toLocaleDateString();
-    return new Date(dateStr).toLocaleDateString();
-  }
+  const handlePaymentValidation = async (paymentId, action) => {
+    try {
+      setLoadingBills(true);
 
-  // Generate invoice number
-  function generateInvoiceNumber() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `INV-${year}${month}${day}-${random}`;
-  }
+      const response = await axios.post(`/api/bill-payment-validation/${paymentId}/validate`, {
+        action,
+        admin_notes: adminNotes
+      });
+
+      if (response.data.success) {
+        alert(`Payment ${action}d successfully`);
+        fetchBills();
+        fetchStats();
+        setSelectedPayment(null);
+        setAdminNotes('');
+      } else {
+        throw new Error(response.data.message || `Failed to ${action} payment`);
+      }
+    } catch (error) {
+      console.error('Validation error:', error);
+      alert(error.message || `Failed to ${action} payment`);
+    } finally {
+      setLoadingBills(false);
+    }
+  };
+
+  const handleGenerateInvoice = async (meterReading) => {
+    try {
+      setLoadingReadings(true);
+      
+      // Check if we have the required data
+      if (!meterReading.customer_id) {
+        throw new Error('Customer ID is missing from meter reading data');
+      }
+      
+      const response = await axios.post('/api/invoices/generate', {
+        meter_reading_id: meterReading.id,
+        customer_id: meterReading.customer_id,
+        meter_number: meterReading.meter_number,
+        reading_value: meterReading.reading_value,
+        amount: meterReading.amount,
+        staff_id: meterReading.staff_id,
+        reading_date: meterReading.reading_date
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+
+      if (response.data.success) {
+        const { pdf_url, pdf_filename } = response.data;
+        
+        // Show success message with download option
+        const result = confirm(
+          `Invoice PDF generated successfully!\n\n` +
+          `Filename: ${pdf_filename}\n` +
+          `Click OK to download the PDF, or Cancel to continue.`
+        );
+        
+        if (result && pdf_url) {
+          // Open PDF in new tab for download
+          window.open(pdf_url, '_blank');
+        }
+        
+        fetchMeterReadings(); // Refresh the data
+      } else {
+        throw new Error(response.data.message || 'Failed to generate invoice');
+      }
+    } catch (error) {
+      console.error('Invoice generation error:', error);
+      if (error.response?.status === 401) {
+        router.visit('/');
+        return;
+      }
+      alert(error.response?.data?.message || error.message || 'Failed to generate invoice');
+    } finally {
+      setLoadingReadings(false);
+    }
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric'
+    });
+  };
+
+  const formatCurrency = (amount) => {
+    if (!amount) return '₱0.00';
+    return `₱${parseFloat(amount).toFixed(2)}`;
+  };
+
+  // Calculate billing cycles statistics
+  const totalCycles = billingCycles.length;
+  const activeCycles = billingCycles.filter(cycle => cycle.status === 'active').length;
+  const inactiveCycles = totalCycles - activeCycles;
+  const totalAmount = billingCycles.reduce((sum, cycle) => sum + parseFloat(cycle.amount_due || 0), 0);
+
+  // Calculate bill payment validation statistics
+  const pendingValidation = bills.filter(bill => bill.status === 'pending').length;
+  const unpaidBills = bills.filter(bill => bill.status === 'unpaid').length;
+
+  const renderInvoiceGeneration = () => (
+    <div>
+      {/* Search and Filter Row - matching your screenshot exactly */}
+      <div className="flex items-end gap-8 mb-6">
+        <div className="flex-1">
+          <label className="block text-sm text-gray-700 mb-1">Search</label>
+          <input
+            type="text"
+            placeholder="Search by ID, meter number, remarks, or staff ID"
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block text-sm text-gray-700 mb-1">Staff Filter</label>
+          <select
+            className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white min-w-[140px]"
+            value={staffFilter}
+            onChange={(e) => setStaffFilter(e.target.value)}
+          >
+            <option>All Staff</option>
+            <option>Staff 1</option>
+            <option>Staff 2</option>
+            <option>Staff 3</option>
+          </select>
+        </div>
+      </div>
+
+      {loadingReadings ? (
+        <div className="text-center py-8">Loading...</div>
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-lg">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">ID</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Meter Number</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Reading Value</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Amount</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Remarks</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Staff ID</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Reading Date</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white">
+              {meterReadings.map((reading) => (
+                <tr key={reading.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-3 px-4 text-sm text-gray-900">{reading.id}</td>
+                  <td className="py-3 px-4 text-sm text-gray-900">{reading.meter_number}</td>
+                  <td className="py-3 px-4 text-sm text-gray-900">{reading.reading_value}</td>
+                  <td className="py-3 px-4 text-sm text-gray-900">{formatCurrency(reading.amount)}</td>
+                  <td className="py-3 px-4 text-sm text-gray-900">{reading.remarks || '-'}</td>
+                  <td className="py-3 px-4 text-sm text-gray-900">{reading.staff_id}</td>
+                  <td className="py-3 px-4 text-sm text-gray-900">{formatDate(reading.reading_date)}</td>
+                  <td className="py-3 px-4 text-sm">
+                    <button className="bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm mr-2 hover:bg-gray-300 font-medium">View</button>
+                    <button
+                      onClick={() => handleGenerateInvoice(reading)}
+                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 font-medium"
+                      disabled={loadingReadings}
+                    >
+                      Generate Invoice
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {meterReadings.length === 0 && (
+                <tr>
+                  <td colSpan="8" className="py-8 text-center text-gray-500">No meter readings found</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+      </div>
+    );
+
+  const renderBillPaymentValidation = () => (
+    <div>
+      {/* Filter Row */}
+      <div className="flex items-end gap-8 mb-6">
+        <div>
+          <label className="block text-sm text-gray-700 mb-1">Billing Period</label>
+          <div className="relative">
+            <input
+              type="month"
+              className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white min-w-[140px]"
+              value={billingPeriod}
+              onChange={(e) => setBillingPeriod(e.target.value)}
+            />
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-700 mb-1">Account Type</label>
+          <select
+            className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white min-w-[120px]"
+            value={accountTypeFilter}
+            onChange={(e) => setAccountTypeFilter(e.target.value)}
+          >
+            <option value="All">All</option>
+            <option value="residential">Residential</option>
+            <option value="commercial">Commercial</option>
+            <option value="government">Government</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-700 mb-1">Status</label>
+          <select
+            className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white min-w-[120px]"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="All">All</option>
+            <option value="pending_validation">Pending</option>
+            <option value="processing">Processing</option>
+            <option value="completed">Validated</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+        <div className="flex-1">
+          <label className="block text-sm text-gray-700 mb-1">Search</label>
+          <input
+            type="text"
+            placeholder="Search by name or account number"
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-r-md">
+          <div className="text-green-700 text-sm font-medium">Total Payments</div>
+          <div className="text-green-900 text-2xl font-bold">{formatCurrency(stats.total_amount || 0)}</div>
+        </div>
+        <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-md">
+          <div className="text-blue-700 text-sm font-medium">Pending Validation</div>
+          <div className="text-blue-900 text-2xl font-bold">{stats.pending_count || 0}</div>
+        </div>
+        <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-r-md">
+          <div className="text-orange-700 text-sm font-medium">Partial Payments</div>
+          <div className="text-orange-900 text-2xl font-bold">{stats.partial_count || 0}</div>
+        </div>
+      </div>
+
+      {loadingBills ? (
+        <div className="text-center py-8">Loading...</div>
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-lg">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Customer</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Account Details</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Amount</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Type</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Status</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Date</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white">
+              {bills.map((payment) => (
+                <tr key={payment.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-3 px-4">
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {payment.full_name}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {payment.customer_type ? payment.customer_type.toUpperCase() : 'N/A'}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">
+                        Acc#: {payment.account_number}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Ref: {payment.payment_reference || 'N/A'}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {formatCurrency(payment.amount_paid)}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Bill: {formatCurrency(payment.bill_amount)}
+                    </div>
+                  </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                      payment.payment_method === 'GCASH' ? 'bg-blue-100 text-blue-800' :
+                      payment.payment_method === 'MAYA' ? 'bg-purple-100 text-purple-800' :
+                      payment.payment_method === 'CASH' ? 'bg-green-100 text-green-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {payment.payment_method || 'UNKNOWN'}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                      payment.payment_status === 'completed' ? 'bg-green-100 text-green-800' :
+                      payment.payment_status === 'processing' || payment.payment_status === 'pending_validation' ? 'bg-yellow-100 text-yellow-800' :
+                      payment.payment_status === 'rejected' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {payment.payment_status === 'completed' ? 'VALIDATED' :
+                       payment.payment_status === 'processing' || payment.payment_status === 'pending_validation' ? 'PENDING' :
+                       payment.payment_status === 'rejected' ? 'REJECTED' :
+                       payment.payment_status?.toUpperCase() || 'UNKNOWN'}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-sm text-gray-500">
+                    {formatDate(payment.payment_date)}
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex items-center space-x-2">
+                      {(payment.payment_status === 'processing' || payment.payment_status === 'pending_validation') && (
+                        <button
+                          onClick={() => handlePaymentValidation(payment.id, 'approve')}
+                          className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 font-medium"
+                          disabled={loadingBills}
+                        >
+                          Approve
+                        </button>
+                      )}
+                      {payment.payment_status === 'completed' && (
+                        <button
+                          className="bg-gray-500 text-white px-3 py-1 rounded text-sm cursor-default"
+                          disabled
+                        >
+                          Approved
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setSelectedPayment(payment)}
+                        className="bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-300 font-medium"
+                      >
+                        Details
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+          ))}
+              {bills.length === 0 && (
+                <tr>
+                  <td colSpan="7" className="py-8 text-center text-gray-500">No payments found</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+              </div>
+          )}
+
+      {/* Payment Details Modal */}
+      {selectedPayment && (
+        <div className="fixed z-50 inset-0 overflow-y-auto">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900">
+                      Payment Details
+                    </h3>
+                    <div className="mt-4">
+                      <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Reference</p>
+                            <p className="text-sm text-gray-900">{selectedPayment.payment_reference || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Account</p>
+                            <p className="text-sm text-gray-900">{selectedPayment.account_number}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Customer</p>
+                            <p className="text-sm text-gray-900">{selectedPayment.full_name}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Amount</p>
+                            <p className="text-sm text-gray-900">{formatCurrency(selectedPayment.amount_paid)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Method</p>
+                            <p className="text-sm text-gray-900">{selectedPayment.payment_method}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Status</p>
+                            <p className="text-sm text-gray-900">{selectedPayment.payment_status?.replace('_', ' ').toUpperCase()}</p>
+                          </div>
+                        </div>
+                        {selectedPayment.admin_notes && (
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Admin Notes</p>
+                            <p className="text-sm text-gray-900">{selectedPayment.admin_notes}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {(selectedPayment.payment_status === 'processing' || selectedPayment.payment_status === 'pending_validation') && (
+                      <div className="mt-4">
+                        <label className="block text-sm font-medium text-gray-700">
+                            Admin Notes (Optional)
+                        </label>
+                        <textarea
+                          value={adminNotes}
+                          onChange={(e) => setAdminNotes(e.target.value)}
+                            rows={3}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                            placeholder="Add any notes about this payment..."
+                        />
+                      </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                {(selectedPayment.payment_status === 'processing' || selectedPayment.payment_status === 'pending_validation') && (
+                  <>
+                <button
+                  type="button"
+                      onClick={() => handlePaymentValidation(selectedPayment.id, 'approve')}
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm"
+                      disabled={loadingBills}
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                      onClick={() => handlePaymentValidation(selectedPayment.id, 'reject')}
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                      disabled={loadingBills}
+                >
+                  Reject
+                </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPayment(null);
+                    setAdminNotes('');
+                  }}
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderBillingCycles = () => (
+    <div>
+      <div className="mb-4">
+        <h3 className="text-lg font-medium text-gray-900 mb-1">Billing Cycles Management</h3>
+        <p className="text-sm text-gray-600">Billing cycles are automatically synced from customer data</p>
+      </div>
+
+      {/* Filter Row - matching your screenshot exactly */}
+      <div className="flex items-end gap-8 mb-6">
+        <div>
+          <label className="block text-sm text-gray-700 mb-1">Account Type</label>
+          <select
+            className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white min-w-[120px]"
+            value={accountTypeFilter}
+            onChange={(e) => setAccountTypeFilter(e.target.value)}
+          >
+            <option>All</option>
+            <option>Residential</option>
+            <option>Commercial</option>
+            <option>Government</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-700 mb-1">Billing Period</label>
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="-------- ----"
+              className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white min-w-[140px]"
+              value={billingPeriod}
+              onChange={(e) => setBillingPeriod(e.target.value)}
+            />
+            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+              <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-700 mb-1">Search</label>
+          <input
+            type="text"
+            placeholder="Search by name or account number"
+            className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white min-w-[280px]"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Statistics Cards - matching your screenshot */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-md">
+          <div className="text-blue-700 text-sm font-medium">Total Cycles</div>
+          <div className="text-blue-900 text-2xl font-bold">{totalCycles}</div>
+        </div>
+        <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-r-md">
+          <div className="text-green-700 text-sm font-medium">Active</div>
+          <div className="text-green-900 text-2xl font-bold">{activeCycles}</div>
+        </div>
+        <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-r-md">
+          <div className="text-yellow-700 text-sm font-medium">Inactive</div>
+          <div className="text-yellow-900 text-2xl font-bold">{inactiveCycles}</div>
+        </div>
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-md">
+          <div className="text-red-700 text-sm font-medium">Total Amount</div>
+          <div className="text-red-900 text-2xl font-bold">{formatCurrency(totalAmount)}</div>
+        </div>
+      </div>
+
+      {loadingCycles ? (
+        <div className="text-center py-8">Loading...</div>
+      ) : (
+        <div className="bg-white rounded-lg border border-gray-200">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Customer</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Account Number</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Account Type</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Billing Start Date</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Billing End Date</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Status</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Amount Due</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white">
+              {billingCycles.map((cycle) => (
+                <tr key={cycle.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-3 px-4 text-sm text-gray-900">{cycle.customer || 'Unknown'}</td>
+                  <td className="py-3 px-4 text-sm text-gray-900">{cycle.account_number || '-'}</td>
+                  <td className="py-3 px-4 text-sm text-gray-900">{cycle.account_type || '-'}</td>
+                  <td className="py-3 px-4 text-sm text-gray-900">{formatDate(cycle.billing_start_date)}</td>
+                  <td className="py-3 px-4 text-sm text-gray-900">{formatDate(cycle.billing_end_date)}</td>
+                  <td className="py-3 px-4 text-sm">
+                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                      cycle.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {cycle.status}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-sm text-gray-900">{formatCurrency(cycle.amount_due)}</td>
+                  <td className="py-3 px-4 text-sm">
+                    <button 
+                      onClick={() => setSelectedBillingCycle(cycle)}
+                      className="bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-300 font-medium"
+                    >
+                      Details
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {billingCycles.length === 0 && (
+                <tr>
+                  <td colSpan="8" className="py-8 text-center text-gray-500">No billing cycles found</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Billing Cycle Details Modal */}
+      {selectedBillingCycle && (
+        <div className="fixed z-50 inset-0 overflow-y-auto">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900">
+                      Billing Cycle Details
+                    </h3>
+                    <div className="mt-4">
+                      <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Cycle ID</p>
+                            <p className="text-sm text-gray-900">{selectedBillingCycle.id}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Customer ID</p>
+                            <p className="text-sm text-gray-900">{selectedBillingCycle.customer_id}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Customer Name</p>
+                            <p className="text-sm text-gray-900">{selectedBillingCycle.customer}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Account Number</p>
+                            <p className="text-sm text-gray-900">{selectedBillingCycle.account_number}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Account Type</p>
+                            <p className="text-sm text-gray-900">{selectedBillingCycle.account_type?.toUpperCase()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Status</p>
+                            <p className="text-sm text-gray-900">{selectedBillingCycle.status?.toUpperCase()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Billing Start Date</p>
+                            <p className="text-sm text-gray-900">{formatDate(selectedBillingCycle.billing_start_date)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Billing End Date</p>
+                            <p className="text-sm text-gray-900">{formatDate(selectedBillingCycle.billing_end_date)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Amount Due</p>
+                            <p className="text-sm text-gray-900">{formatCurrency(selectedBillingCycle.amount_due)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Created Date</p>
+                            <p className="text-sm text-gray-900">{formatDate(selectedBillingCycle.created_at)}</p>
+                          </div>
+                        </div>
+                        {selectedBillingCycle.email && (
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Email</p>
+                            <p className="text-sm text-gray-900">{selectedBillingCycle.email}</p>
+                          </div>
+                        )}
+                        {selectedBillingCycle.contact_number && (
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Contact Number</p>
+                            <p className="text-sm text-gray-900">{selectedBillingCycle.contact_number}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button
+                  type="button"
+                  onClick={() => setSelectedBillingCycle(null)}
+                  className="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderRateManagement = () => (
+    <div className="text-center py-12">
+      <h3 className="text-xl font-medium text-gray-700 mb-2">Rate Management</h3>
+      <p className="text-gray-500">Water rates, penalty rates, service charges</p>
+      {loadingRates && <div className="mt-4 text-gray-500">Loading...</div>}
+    </div>
+  );
+
+  const renderBillingHistory = () => (
+    <div>
+      {/* Filter Row */}
+      <div className="flex justify-between items-end mb-4">
+        <div className="flex items-end gap-6">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Account Type</label>
+            <select
+              className="px-3 py-2 text-sm border border-gray-300 rounded-md"
+              value={accountTypeFilter}
+              onChange={(e) => setAccountTypeFilter(e.target.value)}
+            >
+              <option>All</option>
+              <option>Residential</option>
+              <option>Commercial</option>
+              <option>Government</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Billing Period</label>
+            <input
+              type="month"
+              className="px-3 py-2 text-sm border border-gray-300 rounded-md"
+              value={billingPeriod}
+              onChange={(e) => setBillingPeriod(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Search</label>
+            <input
+              type="text"
+              placeholder="Search by name or account number"
+              className="w-64 px-3 py-2 text-sm border border-gray-300 rounded-md"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {loadingHistory ? (
+        <div className="text-center py-8">Loading...</div>
+      ) : (
+        <div className="bg-white rounded-lg">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Customer</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Account Number</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Billing Period</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Amount</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Due Date</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Status</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {billingHistory.map((history) => (
+                <tr key={history.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-3 px-4 text-sm text-gray-900">{history.full_name}</td>
+                  <td className="py-3 px-4 text-sm text-gray-900">{history.account_number}</td>
+                  <td className="py-3 px-4 text-sm text-gray-900">{history.billing_period}</td>
+                  <td className="py-3 px-4 text-sm text-gray-900">{formatCurrency(history.amount_paid)}</td>
+                  <td className="py-3 px-4 text-sm text-gray-900">{formatDate(history.due_date)}</td>
+                  <td className="py-3 px-4 text-sm">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      history.payment_status === 'completed' ? 'bg-green-100 text-green-800' :
+                      history.payment_status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {history.payment_status === 'completed' ? 'Paid' : 
+                       history.payment_status === 'processing' ? 'Unpaid' : history.payment_status}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-sm">
+                    <button className="bg-gray-100 text-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-200">Details</button>
+                  </td>
+                </tr>
+              ))}
+              {billingHistory.length === 0 && (
+                <tr>
+                  <td colSpan="7" className="py-8 text-center text-gray-500">No billing history found</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
+  const tabs = [
+    { key: 'invoice-generation', label: 'Invoice Generation' },
+    { key: 'bill-payment-validation', label: 'Bill Payment Validation' },
+    { key: 'billing-cycles', label: 'Billing Cycles' },
+    { key: 'rate-management', label: 'Rate Management' },
+    { key: 'billing-history', label: 'Billing History' },
+  ];
 
   return (
-    <DynamicTitleLayout userRole="bill handler">
-      <BillHandlerLayout>
-        <div className="max-w-full mx-auto p-2 sm:p-4 lg:p-6">
-          <h1 className="text-2xl font-bold mb-6">Billing Management</h1>
-          <div className="bg-white rounded-xl shadow-md p-2 sm:p-4 lg:p-6">
-            {/* Tabs */}
-            <div className="flex border-b mb-6">
-              {billingFeatures.map(feature => (
+    <BillHandlerLayout>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 mx-6 my-6">
+        <div className="px-6 py-4">
+          <h1 className="text-2xl font-bold text-gray-900">Billing Management</h1>
+        </div>
+        
+        {/* Tab Navigation - matching your screenshot */}
+        <div className="border-b border-gray-200">
+          <nav className="px-6">
+            <div className="flex">
+              {tabs.map((tab) => (
                 <button
-                  key={feature.key}
-                  className={`px-4 py-2 font-medium focus:outline-none transition-colors ${
-                    activeTab === feature.key
-                      ? 'text-blue-600 border-b-2 border-blue-600'
-                      : 'text-gray-600 hover:text-blue-600'
+                  key={tab.key}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === tab.key
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-blue-500 hover:border-blue-300'
                   }`}
-                  onClick={() => setActiveTab(feature.key)}
+                  onClick={() => setActiveTab(tab.key)}
                 >
-                  {feature.title}
+                  {tab.label}
                 </button>
               ))}
             </div>
-            {/* Tab Content */}
-            {activeTab === 'invoice-generation' ? (
-              <div className="py-8">
-                {/* Search and Filters */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-                    <input
-                      type="text"
-                      value={readingSearch}
-                      onChange={e => setReadingSearch(e.target.value)}
-                      placeholder="Search by ID, meter number, remarks, or staff ID"
-                      className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Staff Filter</label>
-                    <select
-                      value={readingStatusFilter}
-                      onChange={e => setReadingStatusFilter(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="All">All Staff</option>
-                      {[...new Set(meterReadings.map(r => r.staff_id).filter(Boolean))].map(staffId => (
-                        <option key={staffId} value={staffId}>Staff {staffId}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Table */}
-                <div className="overflow-x-auto">
-                  <table className="min-w-full bg-white">
-                    <thead>
-                      <tr className="bg-gray-50">
-                        <th className="py-2 px-4 text-left">ID</th>
-                        <th className="py-2 px-4 text-left">Meter Number</th>
-                        <th className="py-2 px-4 text-left">Reading Value</th>
-                        <th className="py-2 px-4 text-left">Amount</th>
-                        <th className="py-2 px-4 text-left">Remarks</th>
-                        <th className="py-2 px-4 text-left">Staff ID</th>
-                        <th className="py-2 px-4 text-left">Reading Date</th>
-                        <th className="py-2 px-4 text-left">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredMeterReadings.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className="py-4 text-center text-gray-500">No meter readings found</td>
-                        </tr>
-                      ) : (
-                        filteredMeterReadings.map(reading => (
-                          <tr key={reading.id} className="border-b">
-                            <td className="py-2 px-4">{reading.id}</td>
-                            <td className="py-2 px-4">{reading.meter_number}</td>
-                            <td className="py-2 px-4">{reading.reading_value}</td>
-                            <td className="py-2 px-4">₱{reading.amount}</td>
-                            <td className="py-2 px-4">{reading.remarks}</td>
-                            <td className="py-2 px-4">{reading.staff_id}</td>
-                            <td className="py-2 px-4">{formatDate(reading.reading_date)}</td>
-                            <td className="py-2 px-4">
-                              <button
-                                onClick={() => openReadingModal(reading)}
-                                className="bg-gray-300 text-gray-800 px-3 py-1 rounded hover:bg-gray-400 text-xs mr-2"
-                              >
-                                View
-                              </button>
-                              <button
-                                onClick={() => handleGenerateInvoice(reading.id)}
-                                className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-xs"
-                              >
-                                Generate Invoice
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Meter Reading Details Modal */}
-                {showReadingModal && selectedReading && (
-                  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg">
-                      <h2 className="text-lg font-bold mb-4">Meter Reading Details</h2>
-                      <div className="grid grid-cols-1 gap-3">
-                        <div className="mb-2"><b>ID:</b> {selectedReading.id}</div>
-                        <div className="mb-2"><b>Meter Number:</b> {selectedReading.meter_number}</div>
-                        <div className="mb-2"><b>Reading Value:</b> {selectedReading.reading_value}</div>
-                        <div className="mb-2"><b>Amount:</b> ₱{selectedReading.amount}</div>
-                        <div className="mb-2"><b>Reading Date:</b> {formatDate(selectedReading.reading_date)}</div>
-                        <div className="mb-2"><b>Staff ID:</b> {selectedReading.staff_id}</div>
-                        <div className="mb-2"><b>Remarks:</b> {selectedReading.remarks}</div>
-                        <div className="mb-2"><b>Created At:</b> {formatDate(selectedReading.created_at)}</div>
-                      </div>
-                      <div className="flex justify-end gap-2 mt-4">
-                        <button onClick={() => setShowReadingModal(false)} className="bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400">Close</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Generate Invoice Modal */}
-                {showInvoiceModal && invoiceData && (
-                  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                      <div className="bg-blue-600 text-white p-6 text-center">
-                        <h1 className="text-2xl font-bold">HERMOSA WATER DISTRICT</h1>
-                        <h2 className="text-lg">WATER BILL INVOICE</h2>
-                        <div className="mt-2 text-sm">
-                          Invoice #: INV-{invoiceData.meter_reading.id} | Date: {formatDate(new Date())}
-                        </div>
-                      </div>
-                      <div className="p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                          <div>
-                            <h3 className="text-lg font-semibold text-blue-600 mb-3">Customer Information</h3>
-                            <div className="space-y-2">
-                              <div><strong>Name:</strong> {invoiceData.customer.full_name}</div>
-                              <div><strong>Address:</strong> {invoiceData.customer.address}</div>
-                              <div><strong>Account Number:</strong> {invoiceData.customer.account_number}</div>
-                              <div><strong>Contact Number:</strong> {invoiceData.customer.contact_number}</div>
-                              <div><strong>Customer Type:</strong> {invoiceData.customer.customer_type}</div>
-                            </div>
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-semibold text-blue-600 mb-3">Billing Period</h3>
-                            <div className="space-y-2">
-                              <div><strong>From:</strong> {formatDate(invoiceData.meter_reading.reading_date)}</div>
-                              <div><strong>To:</strong> {formatDate(invoiceData.meter_reading.reading_date)}</div>
-                              <div><strong>Due Date:</strong> <span className="text-red-600 font-bold">{formatDate(dayjs(invoiceData.meter_reading.reading_date).add(15, 'day'))}</span></div>
-                              <div><strong>Rate:</strong> {invoiceData.customer.customer_type}</div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="border-t pt-4 mb-4">
-                          <h3 className="text-lg font-semibold text-blue-600 mb-3">Water Consumption</h3>
-                          <div className="grid grid-cols-3 text-center">
-                            <div>
-                              <div className="text-gray-500">Previous Reading</div>
-                              <div className="text-xl font-bold">{invoiceData.meter_reading.reading_value}</div>
-                            </div>
-                            <div>
-                              <div className="text-gray-500">Current Reading</div>
-                              <div className="text-xl font-bold">{invoiceData.meter_reading.reading_value}</div>
-                            </div>
-                            <div>
-                              <div className="text-gray-500">Total Usage</div>
-                              <div className="text-xl font-bold">{invoiceData.meter_reading.reading_value} m³</div>
-                            </div>
-                          </div>
-                        </div>
-                        {(() => {
-                          // Use reading_value as total usage
-                          const usage = parseFloat(invoiceData.meter_reading.reading_value) || 0;
-                          let remaining = usage;
-                          let breakdown = [];
-                          let subtotal = 0;
-                          // Basic Service Charge
-                          breakdown.push({ desc: 'Basic Service Charge', qty: '1 month', rate: 185, amount: 185 });
-                          subtotal += 185;
-                          // Water Usage (1-10 m³)
-                          let tier1 = Math.min(10, remaining);
-                          if (tier1 > 0) {
-                            let amt = tier1 * 15.5;
-                            breakdown.push({ desc: 'Water Usage (1-10 m³)', qty: `${tier1} m³`, rate: 15.5, amount: amt });
-                            subtotal += amt;
-                            remaining -= tier1;
-                          }
-                          // Water Usage (11-20 m³)
-                          let tier2 = Math.min(10, remaining);
-                          if (tier2 > 0) {
-                            let amt = tier2 * 17.25;
-                            breakdown.push({ desc: 'Water Usage (11-20 m³)', qty: `${tier2} m³`, rate: 17.25, amount: amt });
-                            subtotal += amt;
-                            remaining -= tier2;
-                          }
-                          // Water Usage (21-30 m³)
-                          let tier3 = Math.min(10, remaining);
-                          if (tier3 > 0) {
-                            let amt = tier3 * 19.0;
-                            breakdown.push({ desc: 'Water Usage (21-30 m³)', qty: `${tier3} m³`, rate: 19.0, amount: amt });
-                            subtotal += amt;
-                            remaining -= tier3;
-                          }
-                          // Environmental Fee
-                          let envFee = usage * 0.5;
-                          breakdown.push({ desc: 'Environmental Fee', qty: `${usage} m³`, rate: 0.5, amount: envFee });
-                          subtotal += envFee;
-                          return (
-                            <div>
-                              <h3 className="text-lg font-semibold text-blue-600 mb-3">Charges Breakdown</h3>
-                              <table className="min-w-full text-sm mb-2">
-                                <thead>
-                                  <tr>
-                                    <th className="text-left">Description</th>
-                                    <th className="text-right">Quantity</th>
-                                    <th className="text-right">Rate</th>
-                                    <th className="text-right">Amount</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {breakdown.map((row, idx) => (
-                                    <tr key={idx}>
-                                      <td>{row.desc}</td>
-                                      <td className="text-right">{row.qty}</td>
-                                      <td className="text-right">₱{row.rate.toFixed(2)}</td>
-                                      <td className="text-right font-bold">₱{row.amount.toFixed(2)}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                              <div className="flex justify-end text-lg font-bold">
-                                Subtotal: ₱{subtotal.toFixed(2)}
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                      <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
-                        <button 
-                          onClick={() => setShowInvoiceModal(false)} 
-                          className="bg-gray-300 text-gray-800 px-6 py-2 rounded hover:bg-gray-400"
-                        >
-                          Close
-                        </button>
-                        <button 
-                          onClick={() => window.print()} 
-                          className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
-                        >
-                          Print Invoice
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : activeTab === 'bill-generation' ? (
-              <div className="py-8">
-                {/* Filters */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Billing Period</label>
-                    <input
-                      type="month"
-                      value={billingPeriod}
-                      onChange={e => setBillingPeriod(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Account Type</label>
-                    <select
-                      value={accountType}
-                      onChange={e => setAccountType(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="All">All</option>
-                      <option value="Commercial">Commercial</option>
-                      <option value="Residential">Residential</option>
-                      <option value="Government">Government</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                    <select
-                      value={statusFilter}
-                      onChange={e => setStatusFilter(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="All">All</option>
-                      <option value="Pending Validation">Pending Validation</option>
-                      <option value="Unpaid">Unpaid</option>
-                      <option value="Confirmed">Confirmed</option>
-                      <option value="Rejected">Rejected</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-                    <input
-                      type="text"
-                      value={searchTerm}
-                      onChange={e => setSearchTerm(e.target.value)}
-                      placeholder="Search by name or account number"
-                      className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-                    <h3 className="font-semibold text-yellow-800">Pending Validation</h3>
-                    <p className="text-2xl font-bold text-yellow-900">{pendingCount}</p>
-                  </div>
-                  <div className="bg-gray-50 border-l-4 border-gray-400 p-4 rounded">
-                    <h3 className="font-semibold text-gray-800">Unpaid Bills</h3>
-                    <p className="text-2xl font-bold text-gray-900">{unpaidCount}</p>
-                  </div>
-                </div>
-
-                {/* Table */}
-                <div className="overflow-x-auto">
-                  <table className="min-w-full bg-white">
-                    <thead>
-                      <tr className="bg-gray-50">
-                        <th className="py-2 px-4 text-left">Customer</th>
-                        <th className="py-2 px-4 text-left">Account Number</th>
-                        <th className="py-2 px-4 text-left">Amount</th>
-                        <th className="py-2 px-4 text-left">Status</th>
-                        <th className="py-2 px-4 text-left">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredBills.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="py-4 text-center text-gray-500">No bills found</td>
-                        </tr>
-                      ) : (
-                        filteredBills.map(bill => (
-                          <tr key={bill.id} className="border-b">
-                            <td className="py-2 px-4">{bill.customer}</td>
-                            <td className="py-2 px-4">{formatAccountNumber(bill.account_number)}</td>
-                            <td className="py-2 px-4">₱{bill.amount?.toLocaleString()}</td>
-                            <td className="py-2 px-4">
-                              <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                bill.status === 'Pending Validation' ? 'bg-yellow-100 text-yellow-800' :
-                                bill.status === 'Unpaid' ? 'bg-gray-100 text-gray-800' :
-                                bill.status === 'Confirmed' ? 'bg-green-100 text-green-800' :
-                                bill.status === 'Rejected' ? 'bg-red-100 text-red-800' : ''
-                              }`}>{bill.status}</span>
-                            </td>
-                            <td className="py-2 px-4">
-                              <div className="flex gap-2 min-w-[180px]">
-                                {bill.status === 'Pending Validation' ? (
-                                  <>
-                                    <button
-                                      onClick={() => handleConfirm(bill.id)}
-                                      className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-xs"
-                                    >
-                                      Confirm
-                                    </button>
-                                    <button
-                                      onClick={() => handleReject(bill.id)}
-                                      className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 text-xs"
-                                    >
-                                      Reject
-                                    </button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button className="invisible px-3 py-1 text-xs">Confirm</button>
-                                    <button className="invisible px-3 py-1 text-xs">Reject</button>
-                                  </>
-                                )}
-                                <button
-                                  onClick={() => openBillDetailsModal(bill)}
-                                  className="bg-gray-300 text-gray-800 px-3 py-1 rounded hover:bg-gray-400 text-xs"
-                                >
-                                  Details
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Bill Details Modal */}
-                {showBillDetailsModal && selectedBill && (
-                  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
-                      <h2 className="text-lg font-bold mb-4">Bill Details</h2>
-                      <div className="mb-2"><b>Customer:</b> {selectedBill.customer}</div>
-                      <div className="mb-2"><b>Account Number:</b> {formatAccountNumber(selectedBill.account_number)}</div>
-                      <div className="mb-2"><b>Account Type:</b> {selectedBill.account_type}</div>
-                      <div className="mb-2"><b>Period:</b> {selectedBill.period}</div>
-                      <div className="mb-2"><b>Amount:</b> ₱{selectedBill.amount?.toLocaleString()}</div>
-                      <div className="mb-2"><b>Status:</b> {selectedBill.status}</div>
-                      <div className="mb-2"><b>Payment Date:</b> {selectedBill.payment_date || '-'}</div>
-                      <div className="mb-2"><b>Payment Method:</b> {selectedBill.payment_method || '-'}</div>
-                      <div className="mb-2"><b>Reference:</b> {selectedBill.reference || '-'}</div>
-                      <div className="flex justify-end gap-2 mt-4">
-                        <button onClick={() => setShowBillDetailsModal(false)} className="bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400">Close</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : activeTab === 'billing-cycles' ? (
-              <div className="py-8">
-                {/* Header with Generate Button */}
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-xl font-semibold">Billing Cycles Management</h2>
-                  <div className="text-sm text-gray-600">
-                    Billing cycles are automatically synced from customer data
-                  </div>
-                </div>
-
-                {/* Filters */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Account Type</label>
-                    <select
-                      value={cycleAccountType}
-                      onChange={e => setCycleAccountType(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="All">All</option>
-                      <option value="Commercial">Commercial</option>
-                      <option value="Residential">Residential</option>
-                      <option value="Government">Government</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Billing Period</label>
-                    <input
-                      type="month"
-                      value={cyclePeriod}
-                      onChange={e => setCyclePeriod(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-                    <input
-                      type="text"
-                      value={cycleSearch}
-                      onChange={e => setCycleSearch(e.target.value)}
-                      placeholder="Search by name or account number"
-                      className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
-                    <h3 className="font-semibold text-blue-800">Total Cycles</h3>
-                    <p className="text-2xl font-bold text-blue-900">{filteredCycles.length}</p>
-                  </div>
-                  <div className="bg-green-50 border-l-4 border-green-400 p-4 rounded">
-                    <h3 className="font-semibold text-green-800">Active</h3>
-                    <p className="text-2xl font-bold text-green-900">
-                      {cycles.filter(c => c.status === 'active').length}
-                    </p>
-                  </div>
-                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-                    <h3 className="font-semibold text-yellow-800">Inactive</h3>
-                    <p className="text-2xl font-bold text-yellow-900">
-                      {cycles.filter(c => c.status === 'inactive').length}
-                    </p>
-                  </div>
-                  <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded">
-                    <h3 className="font-semibold text-red-800">Total Amount</h3>
-                    <p className="text-2xl font-bold text-red-900">
-                      ₱{cycles.reduce((sum, c) => sum + (parseFloat(c.amount_due) || 0), 0).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Loading or Table */}
-                {cycleLoading ? (
-                  <div className="text-center py-10 text-lg font-semibold text-blue-600">Loading billing cycles...</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full bg-white">
-                      <thead>
-                        <tr className="bg-gray-50">
-                          <th className="py-2 px-4 text-left">Customer</th>
-                          <th className="py-2 px-4 text-left">Account Number</th>
-                          <th className="py-2 px-4 text-left">Account Type</th>
-                          <th className="py-2 px-4 text-left">Billing Start Date</th>
-                          <th className="py-2 px-4 text-left">Billing End Date</th>
-                          <th className="py-2 px-4 text-left">Status</th>
-                          <th className="py-2 px-4 text-left">Amount Due</th>
-                          <th className="py-2 px-4 text-left">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredCycles.length === 0 ? (
-                          <tr>
-                            <td colSpan={8} className="py-4 text-center text-gray-500">
-                              {cycles.length === 0 ? 'No billing cycles found. Billing cycles are automatically created when you access this tab.' : 'No billing cycles match your filters.'}
-                            </td>
-                          </tr>
-                        ) : (
-                          filteredCycles.map(cycle => (
-                            <tr key={cycle.id} className="border-b">
-                              <td className="py-2 px-4">{cycle.customer}</td>
-                              <td className="py-2 px-4">{cycle.account_number}</td>
-                              <td className="py-2 px-4">{cycle.account_type}</td>
-                              <td className="py-2 px-4">{formatDate(cycle.billing_start_date)}</td>
-                              <td className="py-2 px-4">{formatDate(cycle.billing_end_date)}</td>
-                              <td className="py-2 px-4">
-                                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                  cycle.status === 'active' ? 'bg-green-100 text-green-800' :
-                                  cycle.status === 'inactive' ? 'bg-red-100 text-red-800' :
-                                  'bg-gray-100 text-gray-800'
-                                }`}>{cycle.status || 'active'}</span>
-                              </td>
-                              <td className="py-2 px-4">₱{parseFloat(cycle.amount_due || 0).toLocaleString()}</td>
-                              <td className="py-2 px-4">
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => openCycleDetailsModal(cycle)}
-                                    className="bg-gray-300 text-gray-800 px-3 py-1 rounded hover:bg-gray-400 text-xs"
-                                  >
-                                    Details
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Cycle Details Modal */}
-                {showCycleDetailsModal && selectedCycle && (
-                  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg">
-                      <h2 className="text-lg font-bold mb-4">Billing Cycle Details</h2>
-                      <div className="grid grid-cols-1 gap-2">
-                        <div className="mb-2"><b>Customer:</b> {selectedCycle.customer}</div>
-                        <div className="mb-2"><b>Account Number:</b> {selectedCycle.account_number}</div>
-                        <div className="mb-2"><b>Account Type:</b> {selectedCycle.account_type}</div>
-                        <div className="mb-2"><b>Billing Start Date:</b> {formatDate(selectedCycle.billing_start_date)}</div>
-                        <div className="mb-2"><b>Billing End Date:</b> {formatDate(selectedCycle.billing_end_date)}</div>
-                        <div className="mb-2"><b>Status:</b> {selectedCycle.status}</div>
-                        <div className="mb-2"><b>Amount Due:</b> ₱{parseFloat(selectedCycle.amount_due || 0).toLocaleString()}</div>
-                        <div className="mb-2"><b>Created:</b> {formatDate(selectedCycle.created_at)}</div>
-                      </div>
-                      <div className="flex justify-end gap-2 mt-4">
-                        <button onClick={() => setShowCycleDetailsModal(false)} className="bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400">Close</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : activeTab === 'billing-history' ? (
-              <div className="py-8">
-                {/* Filters */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Account Type</label>
-                    <select
-                      value={historyAccountType}
-                      onChange={e => setHistoryAccountType(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="All">All</option>
-                      <option value="Commercial">Commercial</option>
-                      <option value="Residential">Residential</option>
-                      <option value="Government">Government</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Billing Period</label>
-                    <input
-                      type="month"
-                      value={historyPeriod}
-                      onChange={e => setHistoryPeriod(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-                    <input
-                      type="text"
-                      value={historySearch}
-                      onChange={e => setHistorySearch(e.target.value)}
-                      placeholder="Search by name or account number"
-                      className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Table */}
-                <div className="overflow-x-auto">
-                  <table className="min-w-full bg-white">
-                    <thead>
-                      <tr className="bg-gray-50">
-                        <th className="py-2 px-4 text-left">Customer</th>
-                        <th className="py-2 px-4 text-left">Account Number</th>
-                        <th className="py-2 px-4 text-left">Billing Period</th>
-                        <th className="py-2 px-4 text-left">Amount</th>
-                        <th className="py-2 px-4 text-left">Due Date</th>
-                        <th className="py-2 px-4 text-left">Status</th>
-                        <th className="py-2 px-4 text-left">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredHistory.length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="py-4 text-center text-gray-500">No billing history found</td>
-                        </tr>
-                      ) : (
-                        filteredHistory.map(row => (
-                          <tr key={row.id} className="border-b">
-                            <td className="py-2 px-4">{row.customer}</td>
-                            <td className="py-2 px-4">{formatAccountNumber(row.accountNumber)}</td>
-                            <td className="py-2 px-4">{row.billingPeriod}</td>
-                            <td className="py-2 px-4">₱{row.amount.toLocaleString()}</td>
-                            <td className="py-2 px-4">{formatDate(row.dueDate)}</td>
-                            <td className="py-2 px-4">
-                              <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                row.paymentStatus === 'Paid' ? 'bg-green-100 text-green-800' :
-                                row.paymentStatus === 'Unpaid' ? 'bg-red-100 text-red-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>{row.paymentStatus}</span>
-                            </td>
-                            <td className="py-2 px-4">
-                              <button
-                                onClick={() => openHistoryModal(row)}
-                                className="bg-gray-300 text-gray-800 px-3 py-1 rounded hover:bg-gray-400 text-xs"
-                              >
-                                Details
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* History Details Modal */}
-                {showHistoryModal && selectedHistory && (
-                  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
-                      <h2 className="text-lg font-bold mb-4">Billing History Details</h2>
-                      <div className="mb-2"><b>Customer:</b> {selectedHistory.customer}</div>
-                      <div className="mb-2"><b>Account Number:</b> {formatAccountNumber(selectedHistory.accountNumber)}</div>
-                      <div className="mb-2"><b>Account Type:</b> {selectedHistory.accountType}</div>
-                      <div className="mb-2"><b>Billing Period:</b> {selectedHistory.billingPeriod}</div>
-                      <div className="mb-2"><b>Bill Date:</b> {formatDate(selectedHistory.billDate)}</div>
-                      <div className="mb-2"><b>Due Date:</b> {formatDate(selectedHistory.dueDate)}</div>
-                      <div className="mb-2"><b>Amount:</b> ₱{selectedHistory.amount.toLocaleString()}</div>
-                      <div className="mb-2"><b>Payment Status:</b> {selectedHistory.paymentStatus}</div>
-                      <div className="mb-2"><b>Payment Date:</b> {formatDate(selectedHistory.paymentDate)}</div>
-                      <div className="mb-2"><b>Payment Method:</b> {selectedHistory.paymentMethod || '-'}</div>
-                      <div className="mb-2"><b>Reference:</b> {selectedHistory.reference || '-'}</div>
-                      <div className="mb-2"><b>Remarks:</b> <span className="whitespace-pre-line">{selectedHistory.remarks || '-'}</span></div>
-                      <div className="flex justify-end gap-2 mt-4">
-                        <button onClick={() => setShowHistoryModal(false)} className="bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400">Close</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : activeTab === 'customers' ? (
-              <div className="py-8">
-                {/* Filters */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Account Type</label>
-                    <select
-                      value={customerAccountType}
-                      onChange={e => setCustomerAccountType(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="All">All</option>
-                      <option value="Commercial">Commercial</option>
-                      <option value="Residential">Residential</option>
-                      <option value="Government">Government</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-                    <input
-                      type="text"
-                      value={customerSearch}
-                      onChange={e => setCustomerSearch(e.target.value)}
-                      placeholder="Search by name or account number"
-                      className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-                {/* Table */}
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm text-left border">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="py-2 px-4 font-semibold">Customer Name</th>
-                        <th className="py-2 px-4 font-semibold">Account Number</th>
-                        <th className="py-2 px-4 font-semibold">Account Type</th>
-                        <th className="py-2 px-4 font-semibold">Address</th>
-                        <th className="py-2 px-4 font-semibold">Contact</th>
-                        <th className="py-2 px-4 font-semibold">Email</th>
-                        <th className="py-2 px-4 font-semibold">Status</th>
-                        <th className="py-2 px-4 font-semibold">Billing Status (Current Month)</th>
-                        <th className="py-2 px-4 font-semibold">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredCustomers.length === 0 ? (
-                        <tr>
-                          <td colSpan={9} className="py-4 text-center text-gray-500">No customers found</td>
-                        </tr>
-                      ) : (
-                        filteredCustomers.map(cust => (
-                          <tr key={cust.id} className="border-b">
-                            <td className="py-2 px-4">{cust.name}</td>
-                            <td className="py-2 px-4">{formatAccountNumber(cust.accountNumber)}</td>
-                            <td className="py-2 px-4">{cust.accountType}</td>
-                            <td className="py-2 px-4">{cust.address}</td>
-                            <td className="py-2 px-4">{cust.contact}</td>
-                            <td className="py-2 px-4">{cust.email}</td>
-                            <td className="py-2 px-4">{cust.status}</td>
-                            <td className="py-2 px-4">
-                              <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                cust.billingStatus === 'Paid' ? 'bg-green-100 text-green-800' :
-                                cust.billingStatus === 'Unpaid' ? 'bg-yellow-100 text-yellow-800' :
-                                cust.billingStatus === 'Overdue' ? 'bg-red-100 text-red-800' : ''
-                              }`}>{cust.billingStatus}</span>
-                            </td>
-                            <td className="py-2 px-4">
-                              <button onClick={() => openCustomerModal(cust)} className="bg-gray-300 text-gray-800 min-w-[70px] px-3 py-1 rounded hover:bg-gray-400 text-xs">View</button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-                {/* View Modal */}
-                {showCustomerModal && selectedCustomer && (
-                  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
-                      <h2 className="text-lg font-bold mb-4">Customer Details</h2>
-                      <div className="mb-2"><b>Name:</b> {selectedCustomer.name}</div>
-                      <div className="mb-2"><b>Account Number:</b> {formatAccountNumber(selectedCustomer.accountNumber)}</div>
-                      <div className="mb-2"><b>Account Type:</b> {selectedCustomer.accountType}</div>
-                      <div className="mb-2"><b>Address:</b> {selectedCustomer.address}</div>
-                      <div className="mb-2"><b>Contact:</b> {selectedCustomer.contact}</div>
-                      <div className="mb-2"><b>Email:</b> {selectedCustomer.email}</div>
-                      <div className="mb-2"><b>Status:</b> {selectedCustomer.status}</div>
-                      <div className="mb-2"><b>Billing Status (Current Month):</b> {selectedCustomer.billingStatus}</div>
-                      <div className="flex justify-end gap-2 mt-4">
-                        <button onClick={() => setShowCustomerModal(false)} className="bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400">Close</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="py-8 text-center">
-                <h2 className="text-xl font-semibold mb-2">{currentFeature.title}</h2>
-                <p className="text-gray-600 text-lg">{currentFeature.description}</p>
-              </div>
-            )}
-          </div>
+          </nav>
         </div>
-      </BillHandlerLayout>
-    </DynamicTitleLayout>
+        
+        {/* Tab Content */}
+        <div className="px-6 py-6">
+          {activeTab === 'invoice-generation' && renderInvoiceGeneration()}
+          {activeTab === 'bill-payment-validation' && renderBillPaymentValidation()}
+          {activeTab === 'billing-cycles' && renderBillingCycles()}
+          {activeTab === 'rate-management' && renderRateManagement()}
+          {activeTab === 'billing-history' && renderBillingHistory()}
+        </div>
+      </div>
+    </BillHandlerLayout>
   );
 };
 

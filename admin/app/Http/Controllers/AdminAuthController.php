@@ -17,7 +17,8 @@ class AdminAuthController extends Controller
         try {
             Log::info('Login attempt', [
                 'username' => $request->username,
-                'session_id' => $request->session()->getId()
+                'session_id' => $request->session()->getId(),
+                'request_headers' => $request->headers->all()
             ]);
 
             $request->validate([
@@ -36,8 +37,16 @@ class AdminAuthController extends Controller
                 'staff_role' => $staff ? $staff->role : null
             ]);
 
-            if (!$staff || !Hash::check($request->password, $staff->password)) {
-                Log::warning('Invalid credentials', ['username' => $request->username]);
+            if (!$staff) {
+                Log::warning('Staff not found', ['username' => $request->username]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid credentials'
+                ], 401);
+            }
+
+            if (!Hash::check($request->password, $staff->password)) {
+                Log::warning('Invalid password', ['username' => $request->username]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid credentials'
@@ -67,17 +76,27 @@ class AdminAuthController extends Controller
 
             Log::info('User created/found', [
                 'user_id' => $user->id,
-                'user_email' => $user->email
+                'user_email' => $user->email,
+                'staff_role' => $staff->role
             ]);
 
             // Log the user in using web guard
             Auth::guard('web')->login($user, true); // Remember user
+
+            // Regenerate the session
             $request->session()->regenerate();
+
+            // Generate a new CSRF token
+            $token = $request->session()->token();
+            
+            // Set the XSRF-TOKEN cookie
+            $cookie = cookie('XSRF-TOKEN', $token, 60 * 24, null, null, false, true);
 
             Log::info('Login successful', [
                 'user_id' => $user->id,
                 'session_id' => $request->session()->getId(),
-                'auth_check' => Auth::guard('web')->check()
+                'auth_check' => Auth::guard('web')->check(),
+                'csrf_token_set' => !empty($token)
             ]);
 
             return response()->json([
@@ -90,7 +109,7 @@ class AdminAuthController extends Controller
                     'role' => $staff->role,
                     'email' => $staff->email
                 ]
-            ]);
+            ])->withCookie($cookie);
 
         } catch (\Exception $e) {
             Log::error('Login error: ' . $e->getMessage(), [
@@ -118,6 +137,9 @@ class AdminAuthController extends Controller
     public function logout(Request $request)
     {
         try {
+            // Get session ID before logout
+            $sessionId = $request->session()->getId();
+            
             // Logout the user
             Auth::guard('web')->logout();
             
@@ -125,10 +147,24 @@ class AdminAuthController extends Controller
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 
-            return response()->json([
+            // Clear all cookies
+            $cookies = $request->cookies;
+            $clearCookies = [];
+            foreach ($cookies->keys() as $cookieName) {
+                $clearCookies[] = cookie($cookieName, '', -1);
+            }
+            
+            $response = response()->json([
                 'success' => true,
                 'message' => 'Logged out successfully'
             ]);
+            
+            // Attach all cookie clearing to response
+            foreach ($clearCookies as $cookie) {
+                $response->withCookie($cookie);
+            }
+            
+            return $response;
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,

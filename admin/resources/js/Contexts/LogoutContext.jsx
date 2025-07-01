@@ -12,21 +12,65 @@ export const LogoutProvider = ({ children }) => {
             const logoutButton = e.target.closest('[data-logout]');
             if (logoutButton) {
                 e.preventDefault();
+                e.stopPropagation();
                 setShowLogoutConfirm(true);
             }
         };
 
+        // Prevent back navigation after logout
+        window.addEventListener('popstate', function(event) {
+            if (document.cookie.indexOf('logged_out=true') !== -1) {
+                window.location.replace('/');
+            }
+        });
+
         document.addEventListener('click', handleLogoutClick);
-        return () => document.removeEventListener('click', handleLogoutClick);
+        return () => {
+            document.removeEventListener('click', handleLogoutClick);
+        };
     }, []);
 
     const handleConfirmLogout = async () => {
         try {
+            // Clear any stored state
+            localStorage.clear();
+            sessionStorage.clear();
+
+            // Clear all cookies by setting their expiration to the past
+            document.cookie.split(';').forEach(cookie => {
+                document.cookie = cookie
+                    .replace(/^ +/, '')
+                    .replace(/=.*/, `=;expires=${new Date(0).toUTCString()};path=/`);
+            });
+
+            // Set a temporary cookie to indicate logged out state
+            document.cookie = 'logged_out=true;path=/';
+
+            // Get CSRF token first
             await axios.get('/sanctum/csrf-cookie');
-            await axios.post('/admin/logout');
-            window.location.href = '/';
+
+            // Perform logout
+            await axios.post('/admin/logout', {}, {
+                headers: {
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
+                }
+            });
+
+            // Clear browser history to prevent back navigation
+            window.history.pushState(null, '', '/');
+            window.history.pushState(null, '', '/');
+            window.history.pushState(null, '', '/');
+            window.history.go(-3);
+
+            // Add cache-busting parameter and redirect
+            const redirectUrl = '/?logout=' + new Date().getTime();
+            window.location.replace(redirectUrl);
+
         } catch (error) {
-            window.location.href = '/';
+            console.error('Logout error:', error);
+            // Even if there's an error, redirect to login
+            window.location.replace('/?error=logout');
         }
     };
 
@@ -42,6 +86,7 @@ export const LogoutProvider = ({ children }) => {
                 message="Are you sure you want to log out?"
                 onConfirm={handleConfirmLogout}
                 onCancel={handleCancelLogout}
+                confirmButtonText="Logout"
             />
         </LogoutContext.Provider>
     );

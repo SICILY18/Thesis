@@ -136,10 +136,14 @@ const Accounts = () => {
                     setProfilePicture(response.data.profile_picture);
                 }
             } catch (error) {
-                // ignore error for now
+                console.error('Error fetching profile:', error);
             }
         };
+
         fetchProfileData();
+    }, []);
+
+    useEffect(() => {
         
         // Reset to page 1 when changing tabs or search
         setPagination(prev => ({ ...prev, current_page: 1 }));
@@ -153,9 +157,10 @@ const Accounts = () => {
             console.log('API Response:', response.data);
             
             if (response.data.success) {
-                // Ensure role names are consistent
-                const processedAccounts = response.data.data.data.map(account => ({
+                // Ensure role names are consistent and add unique IDs if missing
+                const processedAccounts = response.data.data.data.map((account, index) => ({
                     ...account,
+                    id: account.id || `temp-${index}`, // Ensure each account has a unique ID
                     role: account.role?.toLowerCase().trim()
                 }));
                 setAccounts(processedAccounts);
@@ -878,69 +883,74 @@ const Accounts = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredAccounts.map((account) => (
-                                    <tr key={account.id} className="border-b hover:bg-blue-50">
-                                        {activeTab === 'customer' ? (
-                                            <>
-                                                <td className="py-3 px-4">
-                                                    {account.first_name && account.last_name 
-                                                        ? `${account.first_name} ${account.last_name}` 
-                                                        : account.name}
-                                                </td>
-                                                <td className="py-3 px-4">{account.username}</td>
-                                                <td className="py-3 px-4">{account.customer_type}</td>
-                                                <td className="py-3 px-4">{account.address}</td>
-                                                <td className="py-3 px-4">{account.contact_number}</td>
-                                                <td className="py-3 px-4">{account.email}</td>
-                                                <td className="py-3 px-4">{account.account_number}</td>
-                                                <td className="py-3 px-4">{account.meter_number}</td>
-                                                <td className="py-3 px-4">
-                                                    <div className="flex items-center">
-                                                        <button
-                                                            onClick={() => handleEdit(account)}
-                                                            className="text-blue-600 hover:text-blue-800"
-                                                        >
-                                                            <span className="material-symbols-outlined">edit</span>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDelete(account.id, 'customer')}
-                                                            className="text-red-600 hover:text-red-800 ml-4"
-                                                        >
-                                                            <span className="material-symbols-outlined">delete</span>
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <td className="py-3 px-4">{account.name}</td>
-                                                <td className="py-3 px-4">{account.username}</td>
-                                                <td className="py-3 px-4">
-                                                    {account.type === 'customer' ? account.customer_type : account.role}
-                                                </td>
-                                                <td className="py-3 px-4">{account.address}</td>
-                                                <td className="py-3 px-4">{account.contact_number}</td>
-                                                <td className="py-3 px-4">{account.email}</td>
-                                                <td className="py-3 px-4">
-                                                    <div className="flex items-center">
-                                                        <button
-                                                            onClick={() => handleEdit(account)}
-                                                            className="text-blue-600 hover:text-blue-800"
-                                                        >
-                                                            <span className="material-symbols-outlined">edit</span>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDelete(account.id, 'staff')}
-                                                            className="text-red-600 hover:text-red-800 ml-4"
-                                                        >
-                                                            <span className="material-symbols-outlined">delete</span>
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </>
-                                        )}
-                                    </tr>
-                                ))}
+                                {filteredAccounts.map((account, index) => {
+                                    // Generate a truly unique key for each row
+                                    const rowKey = `${activeTab}-${account.id || account.account_number || account.username || index}-${index}`;
+                                    
+                                    return (
+                                        <tr key={rowKey} className="border-b hover:bg-blue-50">
+                                            {activeTab === 'customer' ? (
+                                                <>
+                                                    <td className="py-3 px-4">
+                                                        {account.first_name && account.last_name 
+                                                            ? `${account.first_name} ${account.last_name}` 
+                                                            : account.name}
+                                                    </td>
+                                                    <td className="py-3 px-4">{account.username}</td>
+                                                    <td className="py-3 px-4">{account.customer_type}</td>
+                                                    <td className="py-3 px-4">{account.address}</td>
+                                                    <td className="py-3 px-4">{account.contact_number}</td>
+                                                    <td className="py-3 px-4">{account.email}</td>
+                                                    <td className="py-3 px-4">{account.account_number}</td>
+                                                    <td className="py-3 px-4">{account.meter_number}</td>
+                                                    <td className="py-3 px-4">
+                                                        <div className="flex items-center">
+                                                            <button
+                                                                onClick={() => handleEdit(account)}
+                                                                className="text-blue-600 hover:text-blue-800"
+                                                            >
+                                                                <span className="material-symbols-outlined">edit</span>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDelete(account.id, 'customer')}
+                                                                className="text-red-600 hover:text-red-800 ml-4"
+                                                            >
+                                                                <span className="material-symbols-outlined">delete</span>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <td className="py-3 px-4">{account.name}</td>
+                                                    <td className="py-3 px-4">{account.username}</td>
+                                                    <td className="py-3 px-4">
+                                                        {account.type === 'customer' ? account.customer_type : account.role}
+                                                    </td>
+                                                    <td className="py-3 px-4">{account.address}</td>
+                                                    <td className="py-3 px-4">{account.contact_number}</td>
+                                                    <td className="py-3 px-4">{account.email}</td>
+                                                    <td className="py-3 px-4">
+                                                        <div className="flex items-center">
+                                                            <button
+                                                                onClick={() => handleEdit(account)}
+                                                                className="text-blue-600 hover:text-blue-800"
+                                                            >
+                                                                <span className="material-symbols-outlined">edit</span>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDelete(account.id, 'staff')}
+                                                                className="text-red-600 hover:text-red-800 ml-4"
+                                                            >
+                                                                <span className="material-symbols-outlined">delete</span>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </>
+                                            )}
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -997,7 +1007,7 @@ const Accounts = () => {
                                                     (page === pagination.last_page - 1 && pagination.current_page < pagination.last_page - 3)) {
                                                     return (
                                                         <span
-                                                            key={page}
+                                                            key={`ellipsis-${page}`}
                                                             className="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300"
                                                         >
                                                             ...
@@ -1009,7 +1019,7 @@ const Accounts = () => {
                                             
                                             return (
                                                 <button
-                                                    key={page}
+                                                    key={`page-${page}`}
                                                     onClick={() => handlePageChange(page)}
                                                     className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
                                                         page === pagination.current_page

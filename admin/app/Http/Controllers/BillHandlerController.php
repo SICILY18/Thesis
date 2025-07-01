@@ -153,24 +153,15 @@ class BillHandlerController extends Controller
                 'staff_role' => $staff->role
             ]);
 
-            // Handle profile_picture field - decode JSON if it exists
+            // Handle profile picture - if it exists, make sure it's a URL
             $profilePicture = null;
             if ($staff->profile_picture) {
-                try {
-                    if (is_string($staff->profile_picture)) {
-                        $decoded = json_decode($staff->profile_picture, true);
-                        if ($decoded && isset($decoded['data'])) {
-                            // Convert buffer data to string
-                            $profilePicture = implode('', array_map('chr', $decoded['data']));
-                        } else {
-                            $profilePicture = $staff->profile_picture;
-                        }
-                    } else {
-                        $profilePicture = $staff->profile_picture;
-                    }
-                } catch (\Exception $e) {
-                    Log::warning('Failed to decode profile picture: ' . $e->getMessage());
-                    $profilePicture = null;
+                if (str_starts_with($staff->profile_picture, 'http')) {
+                    // If it's already a URL, use it as is
+                    $profilePicture = $staff->profile_picture;
+                } else {
+                    // If it's a path, convert it to a URL
+                    $profilePicture = url('storage/' . ltrim($staff->profile_picture, '/'));
                 }
             }
 
@@ -277,24 +268,15 @@ class BillHandlerController extends Controller
                 ->where('id', $staff->id)
                 ->first();
 
-            // Handle profile_picture field - decode JSON if it exists
+            // Handle profile picture - if it exists, make sure it's a URL
             $profilePicture = null;
             if ($updatedStaff->profile_picture) {
-                try {
-                    if (is_string($updatedStaff->profile_picture)) {
-                        $decoded = json_decode($updatedStaff->profile_picture, true);
-                        if ($decoded && isset($decoded['data'])) {
-                            // Convert buffer data to string
-                            $profilePicture = implode('', array_map('chr', $decoded['data']));
-                        } else {
-                            $profilePicture = $updatedStaff->profile_picture;
-                        }
-                    } else {
-                        $profilePicture = $updatedStaff->profile_picture;
-                    }
-                } catch (\Exception $e) {
-                    Log::warning('Failed to decode profile picture in update: ' . $e->getMessage());
-                    $profilePicture = null;
+                if (str_starts_with($updatedStaff->profile_picture, 'http')) {
+                    // If it's already a URL, use it as is
+                    $profilePicture = $updatedStaff->profile_picture;
+                } else {
+                    // If it's a path, convert it to a URL
+                    $profilePicture = url('storage/' . ltrim($updatedStaff->profile_picture, '/'));
                 }
             }
 
