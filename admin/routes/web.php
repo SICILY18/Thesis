@@ -51,6 +51,11 @@ Route::middleware(['web', 'admin.auth'])->prefix('admin')->group(function () {
         Route::put('/{id}', [TicketController::class, 'update']);
     });
 
+    // Dispute routes
+    Route::get('/dispute', function () {
+        return Inertia::render('Dispute');
+    })->name('admin.dispute');
+
     Route::get('/profile', function () {
         return Inertia::render('Profile', [
             'auth' => [

@@ -119,6 +119,10 @@ const AdminLayout = ({ children }) => {
                                 )}
                             </div>
                         </Link>
+                        <Link href="/admin/dispute" className={`flex items-center px-6 py-3 text-base ${currentPath === '/admin/dispute' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                            <span className="material-symbols-outlined mr-3">gavel</span>
+                            Dispute
+                        </Link>
                         <Link href="/admin/profile" className={`flex items-center px-6 py-3 text-base ${currentPath === '/admin/profile' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                             <span className="material-symbols-outlined mr-3">person</span>
                             Profile
@@ -158,6 +162,7 @@ const AdminLayout = ({ children }) => {
                          currentPath === '/admin/payment' ? 'Payment Management' :
                          currentPath === '/admin/reports' ? 'Reports' :
                          currentPath === '/admin/tickets' ? 'Tickets' :
+                         currentPath === '/admin/dispute' ? 'Dispute Management' :
                          currentPath === '/admin/profile' ? 'Profile' :
                          'Admin Dashboard'}
                     </h1>
