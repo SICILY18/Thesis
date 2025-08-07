@@ -57,6 +57,7 @@ const Reports = () => {
     });
     
     const [loading, setLoading] = useState(false);
+    const [exporting, setExporting] = useState(false);
 
     useEffect(() => {
         const fetchProfileData = async () => {
@@ -113,10 +114,11 @@ const Reports = () => {
         try {
             console.log('Fetching meter readings with params:', { accountType, page });
             
-            const response = await axios.get('/api/meter-readings', {
+            const response = await axios.get('/admin/meter-readings', {
                 params: {
-                    accountType: accountType,
-                    page: page
+                    accountType: accountType !== 'All' ? accountType : null,
+                    page: page,
+                    per_page: 10
                 },
                 headers: {
                     'Accept': 'application/json',
@@ -251,40 +253,60 @@ const Reports = () => {
     const fetchPaymentReports = async (page = 1) => {
         setLoading(true);
         try {
-            // TODO: Replace with actual API call when payment reports endpoint is available
-            // For now, using sample data with pagination simulation
-            const sampleData = [
-                {
-                    id: 1,
-                    payment_date: '2024-03-20',
-                    customer_name: 'John Doe',
-                    account_number: '12345678',
-                    payment_amount: 1500.00,
-                    payment_method: 'Online',
-                    status: 'Successful',
-                    reference_number: 'PM123456789'
+            console.log('Fetching payment reports with params:', { page });
+            
+            const response = await axios.get('/admin/bill-payment-validation', {
+                params: {
+                    page: page,
+                    per_page: 10,
+                    status: 'All'
                 },
-                {
-                    id: 2,
-                    payment_date: '2024-03-19',
-                    customer_name: 'Jane Smith',
-                    account_number: '12345679',
-                    payment_amount: 2200.00,
-                    payment_method: 'Bank Transfer',
-                    status: 'Successful',
-                    reference_number: 'PM123456790'
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
                 }
-            ];
-
-            setPaymentReports(sampleData);
-            setPaymentPagination({
-                current_page: 1,
-                last_page: 1,
-                per_page: 10,
-                total: sampleData.length,
-                from: 1,
-                to: sampleData.length
             });
+            
+            console.log('Raw API Response:', response.data);
+            
+            if (response.data && response.data.success) {
+                // The backend now returns properly paginated data
+                const responseData = response.data.data;
+                const mappedData = responseData.data.map(payment => {
+                    return {
+                        id: payment.id,
+                        payment_date: payment.payment_date || 'N/A',
+                        customer: payment.name || payment.full_name || 'N/A',
+                        account_number: payment.account_number || 'N/A',
+                        period: payment.period || payment.billing_period || 'N/A',
+                        amount: payment.amount || payment.amount_paid || 0,
+                        bill_amount: payment.bill_amount || 0,
+                        due_date: payment.due_date || 'N/A',
+                        payment_method: payment.payment_method || 'N/A',
+                        reference: payment.reference || payment.payment_reference || 'N/A',
+                        status: payment.status || payment.payment_status || 'N/A',
+                        account_type: payment.account_type || payment.bill_type || 'N/A',
+                        validated_at: payment.validated_at || null
+                    };
+                });
+
+                console.log('Mapped Data:', mappedData);
+                setPaymentReports(mappedData);
+                
+                // Update pagination state with server-provided data
+                setPaymentPagination({
+                    current_page: responseData.current_page,
+                    last_page: responseData.last_page,
+                    per_page: responseData.per_page,
+                    total: responseData.total,
+                    from: responseData.from,
+                    to: responseData.to
+                });
+            } else {
+                console.error('Failed to fetch payment reports:', response.data);
+                setPaymentReports([]);
+                setPaymentPagination(prev => ({ ...prev, total: 0 }));
+            }
         } catch (error) {
             console.error('Error fetching payment reports:', error);
             setPaymentReports([]);
@@ -369,6 +391,373 @@ const Reports = () => {
             handlePaymentPageChange(paymentPagination.current_page + 1);
         }
     };
+
+    // Export functions
+    const handleExportPaymentReportsExcel = async () => {
+        setExporting(true);
+        try {
+            // Fetch ALL payment reports data (not just current page)
+            console.log('Fetching all payment reports for export...');
+
+            const response = await axios.get('/admin/bill-payment-validation', {
+                params: {
+                    per_page: 10000, // Large number to get all records
+                    status: 'All'
+                },
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            let allPaymentReports = [];
+            if (response.data && response.data.success) {
+                const responseData = response.data.data;
+                allPaymentReports = responseData.data.map(payment => {
+                    return {
+                        id: payment.id,
+                        payment_date: payment.payment_date || 'N/A',
+                        customer: payment.name || payment.full_name || 'N/A',
+                        account_number: payment.account_number || 'N/A',
+                        period: payment.period || payment.billing_period || 'N/A',
+                        amount: payment.amount || payment.amount_paid || 0,
+                        bill_amount: payment.bill_amount || 0,
+                        due_date: payment.due_date || 'N/A',
+                        payment_method: payment.payment_method || 'N/A',
+                        reference: payment.reference || payment.payment_reference || 'N/A',
+                        status: payment.status || payment.payment_status || 'N/A',
+                        account_type: payment.account_type || payment.bill_type || 'N/A',
+                        validated_at: payment.validated_at || null
+                    };
+                });
+            }
+
+            console.log(`Exporting ${allPaymentReports.length} payment records to Excel...`);
+
+            // Create CSV content from ALL payment reports data
+            const csvHeaders = [
+                'Payment Date',
+                'Customer',
+                'Account Number',
+                'Period',
+                'Amount',
+                'Payment Method',
+                'Reference',
+                'Status',
+                'Account Type',
+                'Bill Amount',
+                'Due Date',
+                'Validated At'
+            ];
+
+            let csvContent = csvHeaders.join(',') + '\n';
+
+            allPaymentReports.forEach(payment => {
+                const row = [
+                    payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() : 'N/A',
+                    `"${(payment.customer || 'N/A').replace(/"/g, '""')}"`,
+                    payment.account_number || 'N/A',
+                    `"${(payment.period || 'N/A').replace(/"/g, '""')}"`,
+                    parseFloat(payment.amount || 0).toFixed(2),
+                    `"${(payment.payment_method || 'N/A').replace(/"/g, '""')}"`,
+                    `"${(payment.reference || 'N/A').replace(/"/g, '""')}"`,
+                    payment.status === 'completed' ? 'PAID' : payment.status === 'pending' ? 'UNPAID' : (payment.status || 'N/A').toUpperCase(),
+                    payment.account_type || 'N/A',
+                    parseFloat(payment.bill_amount || 0).toFixed(2),
+                    payment.due_date ? new Date(payment.due_date).toLocaleDateString() : 'N/A',
+                    payment.validated_at ? new Date(payment.validated_at).toLocaleString() : 'N/A'
+                ];
+                csvContent += row.join(',') + '\n';
+            });
+
+            // Create and download the file
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `payment_reports_all_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error exporting payment reports to Excel:', error);
+            alert('Error exporting payment reports. Please try again.');
+        } finally {
+            setExporting(false);
+        }
+    };
+
+
+
+    const handleExportMeterReadingsExcel = async () => {
+        setExporting(true);
+        try {
+            // Fetch ALL meter readings data (not just current page)
+            console.log('Fetching all meter readings for export...');
+
+            const response = await axios.get('/api/meter-readings', {
+                params: {
+                    per_page: 10000, // Large number to get all records
+                    account_type: accountType !== 'All' ? accountType : 'All'
+                },
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            let allMeterReadings = [];
+            if (response.data && response.data.success) {
+                const responseData = response.data.data;
+                allMeterReadings = responseData.data.map(reading => {
+                    return {
+                        id: reading.id,
+                        reading_date: reading.reading_date || 'N/A',
+                        customer_name: reading.full_name || reading.customer_name || reading.name || 'N/A',
+                        account_number: reading.account_number || 'N/A',
+                        meter_number: reading.meter_number || 'N/A',
+                        reading_value: reading.current_reading || reading.reading_value || 'N/A',
+                        amount: reading.bill_amount || reading.amount || 0,
+                        account_type: reading.customer_type || reading.account_type || reading.bill_type || 'N/A',
+                        remarks: reading.remarks || reading.notes || 'N/A'
+                    };
+                });
+            }
+
+            console.log(`Exporting ${allMeterReadings.length} meter reading records to Excel...`);
+
+            // Create CSV content from ALL meter readings data
+            const csvHeaders = [
+                'Reading Date',
+                'Customer Name',
+                'Account Number',
+                'Meter Number',
+                'Reading Value',
+                'Amount',
+                'Account Type',
+                'Remarks'
+            ];
+
+            let csvContent = csvHeaders.join(',') + '\n';
+
+            allMeterReadings.forEach(reading => {
+                const row = [
+                    reading.reading_date ? new Date(reading.reading_date).toLocaleDateString() : 'N/A',
+                    `"${(reading.customer_name || 'N/A').replace(/"/g, '""')}"`,
+                    reading.account_number || 'N/A',
+                    reading.meter_number || 'N/A',
+                    reading.reading_value || 'N/A',
+                    parseFloat(reading.amount || 0).toFixed(2),
+                    reading.account_type || 'N/A',
+                    `"${(reading.remarks || 'N/A').replace(/"/g, '""')}"`
+                ];
+                csvContent += row.join(',') + '\n';
+            });
+
+            // Create and download the file
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `meter_readings_all_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error exporting meter readings to Excel:', error);
+            alert('Error exporting meter readings. Please try again.');
+        } finally {
+            setExporting(false);
+        }
+    };
+
+    const handleExportAnnouncementsExcel = async () => {
+        setExporting(true);
+        try {
+            // Fetch ALL announcements data (not just current page)
+            console.log('Fetching all announcements for export...');
+
+            const response = await axios.get('/api/announcements/history', {
+                params: {
+                    per_page: 10000, // Large number to get all records
+                    status: announcementStatus !== 'All' ? announcementStatus : null
+                },
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            let allAnnouncements = [];
+            if (response.data && response.data.success) {
+                const responseData = response.data.data;
+                allAnnouncements = responseData.data.map(announcement => {
+                    return {
+                        id: announcement.id,
+                        title: announcement.title || 'N/A',
+                        body: announcement.body || announcement.content || announcement.message || 'N/A',
+                        status: announcement.status || 'N/A',
+                        created_at: announcement.created_at || 'N/A',
+                        updated_at: announcement.updated_at || 'N/A'
+                    };
+                });
+            } else if (response.data && Array.isArray(response.data)) {
+                // Handle direct array response
+                allAnnouncements = response.data.map(announcement => {
+                    return {
+                        id: announcement.id,
+                        title: announcement.title || 'N/A',
+                        body: announcement.body || announcement.content || announcement.message || 'N/A',
+                        status: announcement.status || 'N/A',
+                        created_at: announcement.created_at || 'N/A',
+                        updated_at: announcement.updated_at || 'N/A'
+                    };
+                });
+            }
+
+            console.log(`Exporting ${allAnnouncements.length} announcement records to Excel...`);
+
+            // Create CSV content from ALL announcements data
+            const csvHeaders = [
+                'Title',
+                'Body',
+                'Status',
+                'Created At',
+                'Updated At'
+            ];
+
+            let csvContent = csvHeaders.join(',') + '\n';
+
+            allAnnouncements.forEach(announcement => {
+                const row = [
+                    `"${(announcement.title || 'N/A').replace(/"/g, '""')}"`,
+                    `"${(announcement.body || 'N/A').replace(/"/g, '""')}"`,
+                    announcement.status || 'N/A',
+                    announcement.created_at ? new Date(announcement.created_at).toLocaleString() : 'N/A',
+                    announcement.updated_at ? new Date(announcement.updated_at).toLocaleString() : 'N/A'
+                ];
+                csvContent += row.join(',') + '\n';
+            });
+
+            // Create and download the file
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `announcements_all_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error exporting announcements to Excel:', error);
+            alert('Error exporting announcements. Please try again.');
+        } finally {
+            setExporting(false);
+        }
+    };
+
+    const handleExportAccountsExcel = async () => {
+        setExporting(true);
+        try {
+            // Fetch ALL accounts data (not just current page)
+            console.log('Fetching all accounts for export...');
+
+            const response = await axios.get('/api/customers', {
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            let allAccounts = [];
+            if (response.data && response.data.success && response.data.data) {
+                // Handle structured response with success flag
+                allAccounts = response.data.data.map(account => {
+                    return {
+                        id: account.id,
+                        full_name: account.full_name || account.name || 'N/A',
+                        account_number: account.account_number || 'N/A',
+                        account_type: account.customer_type || account.account_type || account.type || 'N/A',
+                        address: account.address || account.location || 'N/A',
+                        contact_number: account.phone_number || account.contact_number || account.phone || account.mobile || 'N/A',
+                        email: account.email || account.email_address || 'N/A',
+                        status: account.status || account.account_status || 'Active',
+                        created_at: account.created_at || account.date_created || 'N/A'
+                    };
+                });
+            } else if (response.data && Array.isArray(response.data)) {
+                // Handle direct array response
+                allAccounts = response.data.map(account => {
+                    return {
+                        id: account.id,
+                        full_name: account.full_name || account.name || 'N/A',
+                        account_number: account.account_number || 'N/A',
+                        account_type: account.customer_type || account.account_type || account.type || 'N/A',
+                        address: account.address || account.location || 'N/A',
+                        contact_number: account.phone_number || account.contact_number || account.phone || account.mobile || 'N/A',
+                        email: account.email || account.email_address || 'N/A',
+                        status: account.status || account.account_status || 'Active',
+                        created_at: account.created_at || account.date_created || 'N/A'
+                    };
+                });
+            }
+
+            console.log(`Exporting ${allAccounts.length} account records to Excel...`);
+
+            // Create CSV content from ALL accounts data
+            const csvHeaders = [
+                'Full Name',
+                'Account Number',
+                'Account Type',
+                'Address',
+                'Contact Number',
+                'Email',
+                'Status',
+                'Created At'
+            ];
+
+            let csvContent = csvHeaders.join(',') + '\n';
+
+            allAccounts.forEach(account => {
+                const row = [
+                    `"${(account.full_name || 'N/A').replace(/"/g, '""')}"`,
+                    account.account_number || 'N/A',
+                    account.account_type || 'N/A',
+                    `"${(account.address || 'N/A').replace(/"/g, '""')}"`,
+                    account.contact_number || 'N/A',
+                    account.email || 'N/A',
+                    account.status || 'N/A',
+                    account.created_at ? new Date(account.created_at).toLocaleString() : 'N/A'
+                ];
+                csvContent += row.join(',') + '\n';
+            });
+
+            // Create and download the file
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `accounts_all_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error exporting accounts to Excel:', error);
+            alert('Error exporting accounts. Please try again.');
+        } finally {
+            setExporting(false);
+        }
+    };
+
+
 
     // Helper function to render pagination controls
     const renderPaginationControls = (pagination, handlePageChange, handlePreviousPage, handleNextPage) => {
@@ -506,6 +895,14 @@ const Reports = () => {
                                     <TicketCount />
                                 </div>
                             </Link>
+                                                          <Link href="/admin/dispute" className={`flex items-center px-6 py-3 text-base ${window.location.pathname === '/admin/dispute' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                                 <span className="material-symbols-outlined mr-3">gavel</span>
+                                 Dispute
+                             </Link>
+                             <Link href="/admin/sms-configuration" className={`flex items-center px-6 py-3 text-base ${window.location.pathname === '/admin/sms-configuration' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                                 <span className="material-symbols-outlined mr-3">sms</span>
+                                 SMS Configuration
+                            </Link>
                             <Link href="/admin/profile" className={`flex items-center px-6 py-3 text-base ${window.location.pathname === '/admin/profile' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                                 <span className="material-symbols-outlined mr-3">person</span>
                                 Profile
@@ -596,18 +993,7 @@ const Reports = () => {
                             >
                                 Accounts Report
                             </button>
-                            <button
-                                className={`px-4 py-2 font-medium ${activeTab === 'reportHistory' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600'}`}
-                                onClick={() => setActiveTab('reportHistory')}
-                            >
-                                Report History
-                            </button>
-                            <button
-                                className={`px-4 py-2 font-medium ${activeTab === 'activityLogs' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600'}`}
-                                onClick={() => setActiveTab('activityLogs')}
-                            >
-                                Activity Logs
-                            </button>
+
                         </div>
 
                         {/* Payment Report Table */}
@@ -619,13 +1005,13 @@ const Reports = () => {
                                         <label className="font-medium text-gray-700">Payment Reports</label>
 
                         {/* Export Buttons */}
-                                        <button className="flex items-center px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                                        <button
+                                            onClick={handleExportPaymentReportsExcel}
+                                            disabled={exporting}
+                                            className="flex items-center px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
                                 <span className="material-symbols-outlined mr-1 text-sm">download</span>
-                                Export to Excel
-                            </button>
-                                        <button className="flex items-center px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
-                                <span className="material-symbols-outlined mr-1 text-sm">picture_as_pdf</span>
-                                Export to PDF
+                                {exporting ? 'Exporting...' : 'Export to Excel'}
                             </button>
                                     </div>
                                     <div className="text-sm text-gray-600">
@@ -640,43 +1026,105 @@ const Reports = () => {
                                             <p className="mt-2 text-gray-600">Loading payment reports...</p>
                                         </div>
                                     ) : (
-                                <table className="min-w-full text-sm text-left">
+                                <table className="min-w-full divide-y divide-gray-200">
                                     <thead>
-                                        <tr className="border-b">
-                                            <th className="py-2 px-4 font-semibold">Payment Date</th>
-                                            <th className="py-2 px-4 font-semibold">Customer Name</th>
-                                            <th className="py-2 px-4 font-semibold">Account Number</th>
-                                            <th className="py-2 px-4 font-semibold">Payment Amount</th>
-                                            <th className="py-2 px-4 font-semibold">Payment Method</th>
-                                            <th className="py-2 px-4 font-semibold">Status</th>
-                                            <th className="py-2 px-4 font-semibold">Reference Number</th>
+                                        <tr>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Payment Date
+                                            </th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Customer
+                                            </th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Account Number
+                                            </th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Period
+                                            </th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Amount
+                                            </th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Payment Method
+                                            </th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Reference
+                                            </th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Status
+                                            </th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Account Type
+                                            </th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Bill Amount
+                                            </th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Due Date
+                                            </th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Validated At
+                                            </th>
                                         </tr>
                                     </thead>
-                                    <tbody>
-                                                {paymentReports.length > 0 ? (
-                                                    paymentReports.map((payment) => (
-                                                        <tr key={payment.id} className="border-b hover:bg-blue-50">
-                                                            <td className="py-2 px-4">{payment.payment_date}</td>
-                                                            <td className="py-2 px-4">{payment.customer_name}</td>
-                                                            <td className="py-2 px-4">{payment.account_number}</td>
-                                                            <td className="py-2 px-4">₱{parseFloat(payment.payment_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                                                            <td className="py-2 px-4">{payment.payment_method}</td>
-                                            <td className="py-2 px-4">
-                                                                <span className={`px-2 py-1 rounded-full text-xs ${
-                                                                    payment.status === 'Successful' ? 'bg-green-100 text-green-800' : 
-                                                                    payment.status === 'Failed' ? 'bg-red-100 text-red-800' : 
-                                                                    'bg-yellow-100 text-yellow-800'
-                                                                }`}>
-                                                                    {payment.status}
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {paymentReports.map((payment) => (
+                                            <tr key={payment.id}>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() : 'N/A'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {payment.customer || 'N/A'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {payment.account_number || 'N/A'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {payment.period || 'N/A'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                    ₱{parseFloat(payment.amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {payment.payment_method || 'N/A'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {payment.reference || 'N/A'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full justify-center items-center text-center ${
+                                                        payment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                                        payment.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                                        payment.status === 'processing' ? 'bg-blue-100 text-blue-800' :
+                                                        'bg-red-100 text-red-800'
+                                                    }`} style={{ minWidth: '70px', display: 'inline-flex' }}>
+                                                        {payment.status === 'completed'
+                                                            ? 'PAID'
+                                                            : payment.status === 'pending'
+                                                                ? 'UNPAID'
+                                                                : payment.status
+                                                                    ? payment.status.toUpperCase()
+                                                                    : 'N/A'}
                                                                 </span>
                                                             </td>
-                                                            <td className="py-2 px-4">{payment.reference_number}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {payment.account_type || 'N/A'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                ₱{parseFloat(payment.bill_amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {payment.due_date ? new Date(payment.due_date).toLocaleDateString() : 'N/A'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {payment.validated_at ? new Date(payment.validated_at).toLocaleString() : '-'}
+                                                </td>
                                                         </tr>
-                                                    ))
-                                                ) : (
+                                        ))}
+                                        {paymentReports.length === 0 && (
                                                     <tr>
-                                                        <td colSpan="7" className="py-8 px-4 text-center text-gray-500">
-                                                            No payment reports found.
+                                                <td colSpan="7" className="px-6 py-4 text-center text-sm text-gray-500">
+                                                    No payment records found
                                             </td>
                                         </tr>
                                                 )}
@@ -710,13 +1158,13 @@ const Reports = () => {
                                         </select>
                                         
                                         {/* Export Buttons */}
-                                        <button className="flex items-center px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                                        <button
+                                            onClick={handleExportMeterReadingsExcel}
+                                            disabled={exporting}
+                                            className="flex items-center px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
                                             <span className="material-symbols-outlined mr-1 text-sm">download</span>
-                                            Export to Excel
-                                        </button>
-                                        <button className="flex items-center px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
-                                            <span className="material-symbols-outlined mr-1 text-sm">picture_as_pdf</span>
-                                            Export to PDF
+                                            {exporting ? 'Exporting...' : 'Export to Excel'}
                                         </button>
                                     </div>
                                     <div className="text-sm text-gray-600">
@@ -758,12 +1206,12 @@ const Reports = () => {
                                                         <td className="py-2 px-4">₱{parseFloat(reading.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                                                         <td className="py-2 px-4">
                                                             <span className={`px-2 py-1 rounded-full text-xs ${
-                                                                reading.customer_type === 'residential' ? 'bg-blue-100 text-blue-800' :
-                                                                reading.customer_type === 'commercial' ? 'bg-green-100 text-green-800' :
-                                                                reading.customer_type === 'government' ? 'bg-purple-100 text-purple-800' :
+                                                                reading.account_type === 'Residential' ? 'bg-blue-100 text-blue-800' :
+                                                                reading.account_type === 'Commercial' ? 'bg-green-100 text-green-800' :
+                                                                reading.account_type === 'Government' ? 'bg-purple-100 text-purple-800' :
                                                                 'bg-gray-100 text-gray-800'
                                                             }`}>
-                                                                {reading.customer_type ? reading.customer_type.charAt(0).toUpperCase() + reading.customer_type.slice(1) : 'N/A'}
+                                                                {reading.account_type || 'N/A'}
                                                             </span>
                                                         </td>
                                                         <td className="py-2 px-4">{reading.remarks || '-'}</td>
@@ -805,13 +1253,13 @@ const Reports = () => {
                                         </select>
                                         
                                         {/* Export Buttons */}
-                                        <button className="flex items-center px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                                        <button
+                                            onClick={handleExportAnnouncementsExcel}
+                                            disabled={exporting}
+                                            className="flex items-center px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
                                             <span className="material-symbols-outlined mr-1 text-sm">download</span>
-                                            Export to Excel
-                                        </button>
-                                        <button className="flex items-center px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
-                                            <span className="material-symbols-outlined mr-1 text-sm">picture_as_pdf</span>
-                                            Export to PDF
+                                            {exporting ? 'Exporting...' : 'Export to Excel'}
                                         </button>
                                     </div>
                                     <div className="text-sm text-gray-600">
@@ -907,13 +1355,13 @@ const Reports = () => {
                                         </select>
                                         
                                         {/* Export Buttons */}
-                                        <button className="flex items-center px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                                        <button
+                                            onClick={handleExportAccountsExcel}
+                                            disabled={exporting}
+                                            className="flex items-center px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
                                             <span className="material-symbols-outlined mr-1 text-sm">download</span>
-                                            Export to Excel
-                                        </button>
-                                        <button className="flex items-center px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
-                                            <span className="material-symbols-outlined mr-1 text-sm">picture_as_pdf</span>
-                                            Export to PDF
+                                            {exporting ? 'Exporting...' : 'Export to Excel'}
                                         </button>
                                     </div>
                                     <div className="text-sm text-gray-600">
@@ -1007,15 +1455,7 @@ const Reports = () => {
                             </div>
                         )}
 
-                        {/* Report History Stub */}
-                        {activeTab === 'reportHistory' && (
-                            <div className="text-center text-gray-600 py-12 text-lg">Report History content goes here...</div>
-                        )}
 
-                        {/* Activity Logs Stub */}
-                        {activeTab === 'activityLogs' && (
-                            <div className="text-center text-gray-600 py-12 text-lg">Activity Logs content goes here...</div>
-                        )}
                     </div>
                 </div>
             </div>

@@ -12,30 +12,24 @@ class MeterReading extends Model
     protected $table = 'meter_readings';
 
     protected $fillable = [
-        'customer_id',
         'meter_number',
-        'reading_date',
-        'previous_reading',
-        'current_reading',
-        'consumption',
-        'rate_id',
+        'reading_value',
         'amount',
-        'status',
-        'remarks'
+        'remarks',
+        'staff_id',
+        'reading_date'
     ];
 
     protected $casts = [
-        'reading_date' => 'date',
-        'previous_reading' => 'integer',
-        'current_reading' => 'integer',
-        'consumption' => 'integer',
+        'reading_date' => 'datetime',
+        'reading_value' => 'decimal:2',
         'amount' => 'decimal:2',
     ];
 
-    // Relationship with Customer
-    public function customer()
+    // Relationship with Staff
+    public function staff()
     {
-        return $this->belongsTo(Customer::class, 'customer_id');
+        return $this->belongsTo(Staff::class, 'staff_id');
     }
 
     // Relationship with Invoices

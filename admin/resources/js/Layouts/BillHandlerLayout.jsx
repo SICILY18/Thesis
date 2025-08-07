@@ -85,8 +85,15 @@ const BillHandlerLayout = ({ children }) => {
             <div className="lg:ml-[240px] p-3 sm:p-4 md:p-6 lg:p-6 pt-16 lg:pt-6">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
-                    <h1 className="text-xl font-semibold">
-                        Bill Handler Dashboard
+                    <h1 className="text-3xl font-bold text-gray-900">
+                        Bill Panel
+                        {currentPath !== '/bill-handler/dashboard' && (
+                            <span className="text-xl font-normal text-gray-600 ml-2">
+                                / {currentPath === '/bill-handler/customers' ? 'Customers' :
+                                   currentPath === '/bill-handler/billing' ? 'Billing' :
+                                   currentPath === '/bill-handler/profile' ? 'Profile' : ''}
+                            </span>
+                        )}
                     </h1>
                     <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-600">{auth?.user?.name}</span>

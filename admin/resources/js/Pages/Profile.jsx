@@ -12,36 +12,39 @@ api.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
 const Profile = () => {
     const { auth } = usePage().props;
     const [profileData, setProfileData] = useState({
-        admin_id: '',
+        staff_id: '',
         name: auth?.user?.name || '',
+        username: '',
         address: '',
-        contact: '',
-        email: '',
-        password: '••••••',
-        role: '',
+        contact_number: '',
+        email: auth?.user?.email || '',
+        role: auth?.user?.role || '',
         profile_picture: null
     });
 
     const [isEditing, setIsEditing] = useState(false);
-    const [previewImage, setPreviewImage] = useState(null);
     const [message, setMessage] = useState({ type: '', text: '' });
-    const [tempBlobUrl, setTempBlobUrl] = useState(null);
-
-    // Cleanup blob URL when component unmounts or when preview changes
-    useEffect(() => {
-        return () => {
-            if (tempBlobUrl) {
-                URL.revokeObjectURL(tempBlobUrl);
-            }
-        };
-    }, [tempBlobUrl]);
+    const [previewImage, setPreviewImage] = useState(null);
+    const [selectedFile, setSelectedFile] = useState(null);
 
     // Determine user role and layout based on current path
     const isBillHandler = typeof window !== 'undefined' && window.location.pathname.startsWith('/bill-handler');
     const userRole = isBillHandler ? 'bill handler' : 'admin';
     const Layout = isBillHandler ? BillHandlerLayout : AdminLayout;
-    const apiEndpoint = isBillHandler ? '/bill-handler/profile' : '/admin/profile';
+    const apiEndpoint = isBillHandler ? '/staff/profile' : '/admin/profile';
     const updateEndpoint = isBillHandler ? '/bill-handler/profile/update' : '/admin/profile/update';
+
+    const handleImageChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setSelectedFile(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setPreviewImage(reader.result);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
 
     const initializeCSRF = async () => {
         try {
@@ -54,20 +57,13 @@ const Profile = () => {
     useEffect(() => {
         const initializeProfile = async () => {
             try {
-                // Clear any existing messages
                 setMessage({ type: '', text: '' });
-
-                // Initialize CSRF protection
                 await initializeCSRF();
-
-                // Check authentication status
                 const authCheck = await api.get('/check-auth');
                 if (!authCheck.data.authenticated) {
                     router.visit('/');
                     return;
                 }
-
-                // Now fetch profile data
                 await fetchProfileData();
             } catch (error) {
                 console.error('Initialization error:', error);
@@ -91,20 +87,22 @@ const Profile = () => {
     }, [auth]);
 
     const fetchProfileData = async () => {
-        console.log('=== FETCHING PROFILE DATA ===');
         try {
-            // Ensure CSRF token is set before making request
             await initializeCSRF();
-            
             const response = await api.get(apiEndpoint);
             if (response.data?.success) {
-                const profileData = response.data.data;
-                setProfileData(prevData => ({
-                    ...prevData,
-                    ...profileData,
-                    profile_picture: profileData.profile_picture
-                }));
-                setPreviewImage(profileData.profile_picture);
+                const data = response.data.data;
+                setProfileData({
+                    staff_id: data.id || data.staff_id || '',
+                    name: data.name || '',
+                    username: data.username || '',
+                    email: data.email || '',
+                    role: data.role || '',
+                    address: data.address || '',
+                    contact_number: data.contact || data.contact_number || '',
+                    profile_picture: data.profile_picture || null
+                });
+                setPreviewImage(data.profile_picture || null);
             }
         } catch (error) {
             console.error('Error fetching profile:', error);
@@ -119,150 +117,56 @@ const Profile = () => {
         }
     };
 
-    // Add effect to refresh profile data periodically
     useEffect(() => {
-        // Only refresh if not in editing mode
         if (!isEditing) {
             const interval = setInterval(() => {
                 fetchProfileData();
-            }, 5000); // Refresh every 5 seconds
-
+            }, 5000);
             return () => clearInterval(interval);
         }
     }, [isEditing]);
 
-    const handleImageChange = (e) => {
-        console.log('=== IMAGE CHANGE DEBUG ===');
-        const file = e.target.files[0];
-        console.log('Selected file:', file);
-        
-        if (file) {
-            console.log('File details:', {
-                name: file.name,
-                size: file.size,
-                type: file.type,
-                lastModified: file.lastModified
-            });
-            
-            // Validate file type and size
-            const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
-            if (!validTypes.includes(file.type)) {
-                console.log('Invalid file type:', file.type);
-                setMessage({ type: 'error', text: 'Please upload a valid image file (JPEG, PNG, or GIF)' });
-                return;
-            }
-            if (file.size > 2 * 1024 * 1024) { // 2MB limit
-                console.log('File too large:', file.size);
-                setMessage({ type: 'error', text: 'Image size should be less than 2MB' });
-                return;
-            }
-
-            console.log('File validation passed, updating state...');
-            
-            // Cleanup old blob URL if exists
-            if (tempBlobUrl) {
-                URL.revokeObjectURL(tempBlobUrl);
-            }
-            
-            // Create new blob URL
-            const newBlobUrl = URL.createObjectURL(file);
-            setTempBlobUrl(newBlobUrl);
-            setPreviewImage(newBlobUrl);
-            setProfileData({ ...profileData, profile_picture: file });
-        } else {
-            console.log('No file selected');
-        }
-    };
-
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setProfileData({ ...profileData, [name]: value });
+        setProfileData(prev => ({ ...prev, [name]: value || '' }));
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        console.log('=== PROFILE SUBMIT DEBUG ===');
-        console.log('Profile data:', profileData);
-        console.log('Has profile picture file:', profileData.profile_picture instanceof File);
-        
         try {
-            setMessage({ type: '', text: '' }); // Clear any existing messages
+            setMessage({ type: '', text: '' });
             const formData = new FormData();
             
-            // Add all profile data to formData except password and profile_picture
-            Object.keys(profileData).forEach(key => {
-                if (key !== 'password' && key !== 'profile_picture' && profileData[key] !== null) {
-                    console.log(`Adding to formData: ${key} = ${profileData[key]}`);
-                    formData.append(key, profileData[key]);
-                }
-            });
+            formData.append('name', profileData.name || '');
+            formData.append('username', profileData.username || '');
+            formData.append('email', profileData.email || '');
+            formData.append('address', profileData.address || '');
+            formData.append('contact', profileData.contact_number || '');
 
-            // Handle profile picture separately
-            if (profileData.profile_picture instanceof File) {
-                console.log('Adding profile picture file:', {
-                    name: profileData.profile_picture.name,
-                    size: profileData.profile_picture.size,
-                    type: profileData.profile_picture.type
-                });
-                formData.append('profile_picture', profileData.profile_picture);
-            } else {
-                console.log('No profile picture file to upload');
+            if (selectedFile) {
+                formData.append('profile_picture', selectedFile);
             }
 
-            console.log(`Sending request to ${updateEndpoint}`);
             const response = await api.post(updateEndpoint, formData, {
                 headers: {
-                    'Content-Type': 'multipart/form-data',
-                    'Accept': 'application/json',
-                },
+                    'Content-Type': 'multipart/form-data'
+                }
             });
 
-            console.log('Response received:', response.data);
-
-            if (response.data.success) {
-                console.log('Profile update successful!');
-                setMessage({ type: 'success', text: response.data.message || 'Profile updated successfully!' });
+            if (response.data?.success) {
+                setMessage({ type: 'success', text: 'Profile updated successfully' });
                 setIsEditing(false);
-                
-                // Cleanup temporary blob URL
-                if (tempBlobUrl) {
-                    URL.revokeObjectURL(tempBlobUrl);
-                    setTempBlobUrl(null);
-                }
-                
-                // Update preview image if a new profile picture URL was returned
-                if (response.data.profile_picture) {
-                    setPreviewImage(response.data.profile_picture);
-                }
-                
-                // Refresh profile data
-                console.log('Fetching updated profile...');
+                setSelectedFile(null);
                 await fetchProfileData();
-                
-                // Reset the file input
-                setProfileData(prev => ({
-                    ...prev,
-                    profile_picture: null
-                }));
             } else {
-                console.log('Profile update failed:', response.data.message);
-                throw new Error(response.data.message || 'Failed to update profile');
+                throw new Error('Update failed');
             }
         } catch (error) {
-            console.error('=== PROFILE UPDATE ERROR ===');
-            console.error('Error object:', error);
-            console.error('Response data:', error.response?.data);
-            console.error('Response status:', error.response?.status);
-            
-            // Set error message with more detail
-            const errorMessage = error.response?.data?.message || error.message || 'Failed to update profile. Please try again.';
+            console.error('Error updating profile:', error);
             setMessage({ 
                 type: 'error', 
-                text: errorMessage
+                text: error.response?.data?.message || 'Failed to update profile' 
             });
-            
-            // Keep editing mode active when there's an error
-            setIsEditing(true);
         }
     };
 
@@ -283,18 +187,23 @@ const Profile = () => {
                             {/* Profile Picture Section */}
                             <div className="flex flex-col items-center w-full lg:w-auto md:w-auto">
                                 <div className="relative">
-                                    <img
-                                        src={previewImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(profileData.name || 'User')}&background=0D8ABC&color=fff&size=200`}
-                                        alt="Profile"
-                                        className="w-48 h-48 rounded-full object-cover"
-                                        onError={(e) => {
-                                            console.log('Image load error:', e.target.src);
-                                            e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(profileData.name || 'User')}&background=0D8ABC&color=fff&size=200`;
-                                        }}
-                                    />
+                                    {previewImage ? (
+                                        <img
+                                            src={previewImage}
+                                            alt="Profile"
+                                            className="w-48 h-48 rounded-full object-cover"
+                                            onError={() => {
+                                                setPreviewImage(null);
+                                            }}
+                                        />
+                                    ) : (
+                                        <div className="w-48 h-48 rounded-full bg-[#0D8ABC] flex items-center justify-center text-white text-6xl">
+                                            {profileData.name ? profileData.name.split(' ').map(n => n[0]).join('').toUpperCase() : 'BH'}
+                                        </div>
+                                    )}
                                     {isEditing && (
-                                        <label className="absolute bottom-0 right-0 bg-blue-500 text-white p-2 rounded-full cursor-pointer">
-                                            <span className="material-symbols-outlined">edit</span>
+                                        <label className="absolute bottom-0 right-0 bg-blue-500 text-white p-2 rounded-full cursor-pointer hover:bg-blue-600">
+                                            <span className="material-symbols-outlined">photo_camera</span>
                                             <input
                                                 type="file"
                                                 className="hidden"
@@ -313,8 +222,12 @@ const Profile = () => {
                                             Save Changes
                                         </button>
                                         <button
-                                            onClick={() => setIsEditing(false)}
-                                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 w-full lg:w-auto md:w-auto"
+                                            onClick={() => {
+                                                setIsEditing(false);
+                                                setPreviewImage(profileData.profile_picture);
+                                                setSelectedFile(null);
+                                            }}
+                                            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 w-full lg:w-auto md:w-auto"
                                         >
                                             Cancel
                                         </button>
@@ -322,7 +235,7 @@ const Profile = () => {
                                 ) : (
                                     <button
                                         onClick={() => setIsEditing(true)}
-                                        className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 w-full lg:w-auto md:w-auto"
+                                        className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
                                     >
                                         Edit Profile
                                     </button>
@@ -333,12 +246,10 @@ const Profile = () => {
                             <div className="flex-1 space-y-4 w-full">
                                 <div className="grid grid-cols-1 lg:grid-cols-2 md:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            {isBillHandler ? 'Staff ID' : 'Admin ID'}
-                                        </label>
+                                        <label className="block text-sm font-medium text-gray-700">Staff ID</label>
                                         <input
                                             type="text"
-                                            value={profileData.admin_id || profileData.staff_id || ''}
+                                            value={profileData.staff_id}
                                             className="mt-1 block w-full rounded-lg border-gray-300 bg-gray-50"
                                             disabled
                                         />
@@ -350,6 +261,30 @@ const Profile = () => {
                                             type="text"
                                             name="name"
                                             value={profileData.name}
+                                            onChange={handleInputChange}
+                                            className="mt-1 block w-full rounded-lg border-gray-300"
+                                            disabled={!isEditing}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">Username</label>
+                                        <input
+                                            type="text"
+                                            name="username"
+                                            value={profileData.username}
+                                            onChange={handleInputChange}
+                                            className="mt-1 block w-full rounded-lg border-gray-300"
+                                            disabled={!isEditing}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">Email</label>
+                                        <input
+                                            type="email"
+                                            name="email"
+                                            value={profileData.email}
                                             onChange={handleInputChange}
                                             className="mt-1 block w-full rounded-lg border-gray-300"
                                             disabled={!isEditing}
@@ -372,20 +307,8 @@ const Profile = () => {
                                         <label className="block text-sm font-medium text-gray-700">Contact Number</label>
                                         <input
                                             type="text"
-                                            name="contact"
-                                            value={profileData.contact}
-                                            onChange={handleInputChange}
-                                            className="mt-1 block w-full rounded-lg border-gray-300"
-                                            disabled={!isEditing}
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">Email</label>
-                                        <input
-                                            type="email"
-                                            name="email"
-                                            value={profileData.email}
+                                            name="contact_number"
+                                            value={profileData.contact_number}
                                             onChange={handleInputChange}
                                             className="mt-1 block w-full rounded-lg border-gray-300"
                                             disabled={!isEditing}

@@ -20,4 +20,40 @@ node_modules/@next/swc-win32-x64-msvc/next-swc.win32-x64-msvc.node
 
 # OS files
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Laravel specific
+/vendor/
+/node_modules/
+/public/hot
+/public/storage
+/storage/*.key
+/storage/logs/
+/storage/framework/cache/
+/storage/framework/sessions/
+/storage/framework/views/
+/bootstrap/cache/
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+
+# Next.js specific
+.next/
+out/
+
+# Composer
+composer.phar
+
+# PHP
+*.log
+*.cache
+
+# Database
+*.sqlite
+*.sqlite3
+
+# Temporary files
+*.tmp
+*.temp 

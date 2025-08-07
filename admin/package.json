@@ -11,18 +11,23 @@
         "@vitejs/plugin-react": "^4.6.0",
         "autoprefixer": "^10.4.12",
         "axios": "^1.1.2",
-        "laravel-vite-plugin": "^1.3.0",
+        "laravel-vite-plugin": "^0.7.8",
         "lodash": "^4.17.19",
         "postcss": "^8.4.18",
         "react": "^18.3.1",
         "react-dom": "^18.2.0",
         "tailwindcss": "^3.2.1",
-        "vite": "^6.0.0"
+        "terser": "^5.43.1",
+        "vite": "^4.5.14"
     },
     "dependencies": {
         "chart.js": "^4.3.0",
         "date-picker": "^0.3.0",
         "dayjs": "^1.11.13",
+        "laravel-echo": "^2.1.6",
+        "primeicons": "^7.0.0",
+        "primereact": "^10.9.6",
+        "pusher-js": "^8.4.0",
         "react-chartjs-2": "^5.2.0",
         "react-datepicker": "^8.4.0",
         "react-hot-toast": "^2.5.2"

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, usePage } from '@inertiajs/react';
-import axios from 'axios';
+import axios from '@/utils/api';
 import DynamicTitleLayout from '@/Layouts/DynamicTitleLayout';
 import Notification from '@/Components/Notification';
 import TicketCount from '@/Components/TicketCount';
@@ -15,6 +15,13 @@ const durationOptions = [
   { label: '1 week', value: 7 },
   { label: '1 month', value: 30 },
 ];
+
+// Utility to extract YYYY-MM-DD from any date string
+const extractDate = (dateString) => {
+  if (!dateString) return '';
+  // Handles both "YYYY-MM-DDTHH:mm:ss" and "YYYY-MM-DD HH:mm:ss"
+  return dateString.split('T')[0].split(' ')[0];
+};
 
 const Announcement = () => {
   const { auth } = usePage().props;
@@ -53,10 +60,7 @@ const Announcement = () => {
 
   const fetchAnnouncements = async () => {
     try {
-      // Ensure CSRF token is available
-      await axios.get('/sanctum/csrf-cookie');
-      
-      const response = await axios.get('/api/announcements');
+      const response = await axios.get('/announcements');
       console.log('Fetched announcements:', response.data); // Debug log
       if (Array.isArray(response.data)) {
         setAnnouncements(response.data);
@@ -82,7 +86,7 @@ const Announcement = () => {
 
   const fetchProfileData = async () => {
     try {
-      const response = await axios.get('/api/admin/profile');
+      const response = await axios.get('/admin/profile');
       if (response.data?.success && response.data?.data?.profile_picture) {
         setProfilePicture(response.data.data.profile_picture);
       }
@@ -100,9 +104,6 @@ const Announcement = () => {
     const currentDate = new Date().toISOString().split('T')[0];
 
     try {
-      // Ensure CSRF token is available
-      await axios.get('/sanctum/csrf-cookie');
-      
       const requestData = {
         title: form.title,
         content: form.content,
@@ -114,11 +115,11 @@ const Announcement = () => {
 
       let response;
       if (editingId) {
-        response = await axios.put(`/api/announcements/${editingId}`, requestData);
+        response = await axios.put(`/announcements/${editingId}`, requestData);
         console.log('Update response:', response.data);
         showNotification('Announcement updated successfully');
       } else {
-        response = await axios.post('/api/announcements', requestData);
+        response = await axios.post('/announcements', requestData);
         console.log('Create response:', response.data);
         showNotification('Announcement created successfully');
       }
@@ -154,11 +155,25 @@ const Announcement = () => {
   };
 
   const handleEdit = (announcement) => {
+    let endDateValue =
+      (announcement.end_date && typeof announcement.end_date === 'string'
+        ? extractDate(announcement.end_date)
+        : null) ||
+      (announcement.expired_at && typeof announcement.expired_at === 'string'
+        ? extractDate(announcement.expired_at)
+        : null) ||
+      (announcement.endDate && typeof announcement.endDate === 'string'
+        ? extractDate(announcement.endDate)
+        : null) ||
+      '';
+
+    console.log('Editing announcement:', announcement, 'Resolved end_date:', endDateValue);
+
     setForm({
       title: announcement.title,
       content: announcement.body,
-      start_date: new Date(announcement.published_at).toISOString().split('T')[0],
-      end_date: new Date(announcement.expired_at).toISOString().split('T')[0],
+      start_date: announcement.start_date,
+      end_date: endDateValue,
     });
     setEditingId(announcement.id);
     setShowCreateModal(true);
@@ -168,10 +183,7 @@ const Announcement = () => {
     if (!confirm('Are you sure you want to delete this announcement?')) return;
     
     try {
-      // Ensure CSRF token is available
-      await axios.get('/sanctum/csrf-cookie');
-      
-      await axios.delete(`/api/announcements/${id}`);
+      await axios.delete(`/announcements/${id}`);
       showNotification('Announcement deleted successfully');
       fetchAnnouncements();
       if (editingId === id) {
@@ -237,6 +249,14 @@ const Announcement = () => {
                     Tickets
                     <TicketCount />
                 </div>
+              </Link>
+              <Link href="/admin/dispute" className={`flex items-center px-6 py-3 text-base ${window.location.pathname === '/admin/dispute' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                <span className="material-symbols-outlined mr-3">gavel</span>
+                Dispute
+              </Link>
+              <Link href="/admin/sms-configuration" className={`flex items-center px-6 py-3 text-base ${window.location.pathname === '/admin/sms-configuration' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                <span className="material-symbols-outlined mr-3">sms</span>
+                SMS Configuration
               </Link>
               <Link href="/admin/profile" className={`flex items-center px-6 py-3 text-base ${window.location.pathname === '/admin/profile' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                 <span className="material-symbols-outlined mr-3">person</span>

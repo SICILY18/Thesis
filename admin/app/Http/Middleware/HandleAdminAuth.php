@@ -22,9 +22,14 @@ class HandleAdminAuth
 
         // Check if user is authenticated
         if (!Auth::guard('web')->check()) {
+            if ($request->is('admin-login') || $request->is('/')) {
+                return $next($request);
+            }
+            
             if ($request->expectsJson()) {
                 return response()->json(['message' => 'Unauthenticated.'], 401);
             }
+            
             return redirect('/');
         }
 

@@ -184,6 +184,14 @@ const RateManagement = () => {
                     <TicketCount />
                 </div>
               </Link>
+              <Link href="/admin/dispute" className={`flex items-center px-6 py-3 text-base ${window.location.pathname === '/admin/dispute' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                <span className="material-symbols-outlined mr-3">gavel</span>
+                Dispute
+              </Link>
+              <Link href="/admin/sms-configuration" className={`flex items-center px-6 py-3 text-base ${window.location.pathname === '/admin/sms-configuration' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                <span className="material-symbols-outlined mr-3">sms</span>
+                SMS Configuration
+              </Link>
               <Link href="/admin/profile" className={`flex items-center px-6 py-3 text-base ${window.location.pathname === '/admin/profile' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                 <span className="material-symbols-outlined mr-3">person</span>
                 Profile

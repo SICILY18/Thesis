@@ -21,10 +21,7 @@ class TicketController extends Controller
         try {
             // First get the tickets
             $result = $this->supabase->query('tickets_tb', '*', [
-                'select' => '*',
-                'order' => [
-                    'created_at' => 'desc'
-                ]
+                'order' => 'created_at.desc'
             ]);
 
             if (!$result['success']) {
@@ -40,7 +37,7 @@ class TicketController extends Controller
             $customerData = [];
             if (!empty($accountNumbers)) {
                 $customersResult = $this->supabase->query('customers_tb', '*', [
-                    'select' => 'account_number, name',
+                    'select' => 'account_number, full_name',
                     'filter' => [
                         'account_number' => ['in', implode(',', $accountNumbers)]
                     ]
@@ -71,7 +68,7 @@ class TicketController extends Controller
                     'subcategory' => $ticket['subcategory'],
                     'priority' => $ticket['priority'],
                     'ticket_reference' => $ticket['ticket_reference'],
-                    'customer_name' => $customer ? $customer['name'] : 'Account Number',
+                    'customer_name' => $customer ? $customer['full_name'] : 'Account Number',
                     'account_number' => $ticket['account_number'] ?? '-'
                 ];
             }, $tickets);
@@ -251,26 +248,33 @@ class TicketController extends Controller
         }
     }
 
-    public function update(Request $request, $id)
+    public function update(Request $request, $ticketId)
     {
+        Log::info('TicketController@update called', [
+            'ticketId' => $ticketId,
+            'request_data' => $request->all(),
+            'method' => $request->method(),
+            'url' => $request->url()
+        ]);
+        
         $request->validate([
             'status' => 'required|string|in:Open,In Progress,Resolved',
             'remarks' => 'required|string'
         ]);
 
         try {
-            Log::info('Updating ticket ID: ' . $id);
+            Log::info('Updating ticket ID: ' . $ticketId);
             
             // Get ticket by ticket_id
             $result = $this->supabase->query('tickets_tb', '*', [
                 'select' => '*',
                 'filter' => [
-                    'ticket_id' => ['eq', $id]
+                    'ticket_id' => ['eq', $ticketId]
                 ]
             ]);
             
             if (!$result['success'] || empty($result['data'])) {
-                Log::error('Ticket not found with ID: ' . $id);
+                Log::error('Ticket not found with ID: ' . $ticketId);
                 return response()->json([
                     'success' => false,
                     'message' => 'Ticket not found'
@@ -306,7 +310,7 @@ class TicketController extends Controller
             ];
 
             $updateResult = $this->supabase->update('tickets_tb', $updateData, [
-                'ticket_id' => ['eq', $id]
+                'ticket_id' => ['eq', $ticketId]
             ]);
 
             if (!$updateResult['success']) {
@@ -317,7 +321,7 @@ class TicketController extends Controller
             $updatedResult = $this->supabase->query('tickets_tb', '*', [
                 'select' => '*',
                 'filter' => [
-                    'ticket_id' => ['eq', $id]
+                    'ticket_id' => ['eq', $ticketId]
                 ]
             ]);
 

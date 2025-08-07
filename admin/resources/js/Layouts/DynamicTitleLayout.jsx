@@ -1,24 +1,18 @@
 import React from 'react';
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import Footer from '../Components/Footer';
 
-const DynamicTitleLayout = ({ children, userRole }) => {
-    const getTitle = () => {
-        switch (userRole) {
-            case 'admin':
-                return 'Admin Panel';
-            case 'bill handler':
-                return 'Bill Handler Panel';
-            default:
-                return 'Staff Panel';
-        }
-    };
+const DynamicTitleLayout = ({ children }) => {
+    const { props } = usePage();
+    const title = props.title || 'Staff Panel';
 
     return (
         <>
-            <Head title={getTitle()} />
+            <Head title={title} />
             <div className="flex flex-col min-h-screen">
+                <main className="flex-grow">
                 {children}
+                </main>
                 <Footer />
             </div>
         </>

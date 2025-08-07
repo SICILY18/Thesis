@@ -343,55 +343,85 @@ class SupabaseService
      */
     public function query($table, $select = '*', $conditions = [])
     {
-        $params = [];
-        
-        if ($select !== '*') {
-            $params['select'] = $select;
-        }
+        try {
+            $url = "/rest/v1/{$table}";
+            $params = [];
 
-        // Handle order if specified
-        if (isset($conditions['order'])) {
-            foreach ($conditions['order'] as $column => $direction) {
-                $params['order'] = $column . '.' . $direction;
+            // Handle select fields
+            if ($select !== '*') {
+                $params['select'] = $select;
             }
-        }
 
-        // Handle filters
-        if (isset($conditions['filter'])) {
-            foreach ($conditions['filter'] as $column => $condition) {
-                if (is_array($condition) && count($condition) >= 2) {
-                    $operator = $condition[0];
-                    $value = $condition[1];
-                    
-                    // Special handling for 'in' operator
-                    if ($operator === 'in') {
-                        $params[$column] = "in.({$value})";
-                    } else {
-                        $params[$column] = "{$operator}.{$value}";
-                    }
-                }
-            }
-        } else {
+            // Handle conditions
             foreach ($conditions as $key => $value) {
-                if ($key !== 'order') {
-                    if (is_array($value) && count($value) >= 2) {
-                        $operator = $value[0];
-                        $val = $value[1];
-                        
-                        // Special handling for 'in' operator
-                        if ($operator === 'in') {
-                            $params[$key] = "in.({$val})";
-                        } else {
-                            $params[$key] = "{$operator}.{$val}";
+                if ($key === 'order') {
+                    $params['order'] = $value;
+                } else if ($key === 'limit') {
+                    $params['limit'] = $value;
+                } else if ($key === 'offset') {
+                    $params['offset'] = $value;
+                } else if ($key === 'filter') {
+                    // Handle filter conditions properly for Supabase
+                    foreach ($value as $column => $condition) {
+                        if (is_array($condition) && count($condition) >= 2) {
+                            $operator = $condition[0];
+                            $val = $condition[1];
+                            $params[$column] = "{$operator}.{$val}";
                         }
-                    } else {
-                        $params[$key] = $value;
                     }
+                } else {
+                    // For all other conditions, add them directly
+                    $params[$key] = $value;
                 }
             }
+
+            \Log::info('Supabase query:', [
+                'url' => $url,
+                'params' => $params
+            ]);
+
+            $response = $this->httpClient->get($url, [
+                'query' => $params,
+                'headers' => [
+                    'apikey' => $this->serviceRoleKey,
+                    'Authorization' => 'Bearer ' . $this->serviceRoleKey
+                ]
+            ]);
+
+            $data = json_decode($response->getBody(), true);
+
+            \Log::info('Supabase query response:', [
+                'success' => true,
+                'count' => count($data),
+                'sample' => !empty($data) ? $data[0] : null,
+                'url' => $url,
+                'params' => $params
+            ]);
+
+            return [
+                'success' => true,
+                'data' => $data,
+                'count' => count($data),
+                'first_record' => !empty($data) ? $data[0] : null
+            ];
+
+        } catch (\Exception $e) {
+            \Log::error('Supabase query error:', [
+                'message' => $e->getMessage(),
+                'response' => $e->getResponse() ? $e->getResponse()->getBody()->getContents() : null,
+                'table' => $table,
+                'select' => $select,
+                'conditions' => $conditions
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'data' => [],
+                'count' => 0,
+                'first_record' => null
+            ];
         }
-        
-        return $this->executeQuery('GET', $table, null, $params);
     }
 
     /**

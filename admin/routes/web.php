@@ -7,6 +7,9 @@ use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\TicketController;
+use App\Http\Controllers\MeterReadingController;
+use App\Http\Controllers\CustomerController;
+use Illuminate\Support\Facades\Auth;
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -20,69 +23,294 @@ use App\Http\Controllers\TicketController;
 
 // Public routes
 Route::get('/', function () {
+    // Check if there's a force_login parameter to bypass auth check
+    if (request()->has('force_login')) {
+        Auth::logout();
+        session()->invalidate();
+        session()->regenerateToken();
+        return Inertia::render('AdminLogin');
+    }
+    
+    // Only redirect if user is actually authenticated AND has valid session
+    if (Auth::check() && Auth::user()) {
+        return redirect('/admin/dashboard');
+    }
     return Inertia::render('AdminLogin');
 });
 
-// CSRF route for Sanctum
-Route::get('/sanctum/csrf-cookie', function () {
+// Add a logout route that can be accessed directly to clear sessions
+Route::get('/logout', function () {
+    Auth::logout();
+    session()->invalidate();
+    session()->regenerateToken();
+    
+    // Force redirect to our admin login page
+    return Inertia::render('AdminLogin');
+});
+
+// Simple session clear route
+Route::get('/clear-session', function () {
+    Auth::logout();
+    session()->flush();
+    session()->invalidate();
+    session()->regenerateToken();
+    
     return response()->json([
-        'csrf_token' => csrf_token()
+        'message' => 'Session cleared successfully',
+        'redirect' => '/'
     ]);
 });
 
-Route::post('/api/admin-login', [AdminAuthController::class, 'login'])->middleware('web');
+// Authentication check route
+Route::get('/check-auth', function () {
+    return response()->json([
+        'authenticated' => auth()->check(),
+        'user' => auth()->user()
+    ]);
+});
+
+Route::post('/admin-login', [AdminAuthController::class, 'login']);
+
+Route::post('/admin-logout', [AdminAuthController::class, 'logout']);
+
+// CSRF route for Sanctum
+Route::get('/sanctum/csrf-cookie', function () {
+    return response()->json(['csrf_token' => csrf_token()]);
+});
 
 // Protected admin routes
 Route::middleware(['web', 'admin.auth'])->prefix('admin')->group(function () {
     Route::post('/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
     
     Route::get('/dashboard', function () {
-        return Inertia::render('AdminDashboard');
+        return Inertia::render('AdminDashboard', ['title' => 'Dashboard']);
     })->name('admin.dashboard');
 
     // Tickets routes
     Route::get('/tickets', function () {
-        return Inertia::render('Tickets');
+        return Inertia::render('Tickets', ['title' => 'Tickets']);
     })->name('admin.tickets');
     
     Route::prefix('tickets')->group(function () {
         Route::get('/data', [TicketController::class, 'index']);
         Route::post('/{id}/remarks', [TicketController::class, 'addRemarks']);
-        Route::put('/{id}', [TicketController::class, 'update']);
+        Route::put('/{ticketId}', [TicketController::class, 'update']);
+        
+        // Temporary test route without authentication
+        Route::put('/test/{ticketId}', [TicketController::class, 'update'])->withoutMiddleware(['admin.auth']);
     });
 
     // Dispute routes
     Route::get('/dispute', function () {
-        return Inertia::render('Dispute');
+        return Inertia::render('Dispute', ['title' => 'Dispute']);
     })->name('admin.dispute');
 
+    // Meter Readings routes
+    Route::middleware(['web'])->group(function () {
+        Route::prefix('meter-readings')->group(function () {
+            Route::get('/', [MeterReadingController::class, 'index']);
+            Route::post('/', [MeterReadingController::class, 'store']);
+            Route::get('/{id}', [MeterReadingController::class, 'show']);
+            Route::put('/{id}', [MeterReadingController::class, 'update']);
+            Route::delete('/{id}', [MeterReadingController::class, 'destroy']);
+        });
+    });
+
+    // Profile routes
     Route::get('/profile', function () {
         return Inertia::render('Profile', [
             'auth' => [
                 'user' => request()->user(),
             ],
+            'title' => 'Profile'
         ]);
     })->name('admin.profile');
 
+    Route::get('/profile/data', function () {
+        $user = request()->user();
+        $staff = DB::table('staff_tb')
+            ->where('username', explode('@', $user->email)[0])
+            ->first();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'admin_id' => $staff->id ?? '',
+                'name' => $staff->name ?? $user->name,
+                'email' => $user->email,
+                'role' => $staff->role ?? '',
+                'address' => $staff->address ?? '',
+                'contact' => $staff->contact_number ?? '',
+                'profile_picture' => null
+            ]
+        ]);
+    });
+
+    Route::post('/profile/update', function () {
+        $user = request()->user();
+        $validated = request()->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|max:255',
+            'address' => 'nullable|string|max:255',
+            'contact' => 'nullable|string|max:20'
+        ]);
+
+        // Update user table
+        $user->update([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+        ]);
+
+        // Update staff_tb
+        DB::table('staff_tb')
+            ->where('username', explode('@', $user->email)[0])
+            ->update([
+                'name' => $validated['name'],
+                'address' => $validated['address'],
+                'contact_number' => $validated['contact']
+            ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Profile updated successfully'
+        ]);
+    });
+
     Route::get('/accounts', function () {
-        return Inertia::render('Accounts');
+        return Inertia::render('Accounts', ['title' => 'Accounts']);
     })->name('admin.accounts');
 
     Route::get('/announcement', function () {
-        return Inertia::render('Announcement');
+        return Inertia::render('Announcement', ['title' => 'Announcement']);
     })->name('admin.announcement');
 
     Route::get('/reports', function () {
-        return Inertia::render('Reports');
+        return Inertia::render('Reports', ['title' => 'Reports']);
     })->name('admin.reports');
 
     Route::get('/payment', function () {
-        return Inertia::render('Payment');
+        return Inertia::render('Payment', ['title' => 'Payment']);
     })->name('admin.payment');
 
     Route::get('/rate-management', function () {
-        return Inertia::render('RateManagement');
+        return Inertia::render('RateManagement', ['title' => 'Rate Management']);
     })->name('admin.rateManagement');
+
+    // SMS Configuration Routes
+    Route::get('/sms-configuration', [App\Http\Controllers\SMSConfigurationController::class, 'index'])
+        ->name('admin.smsConfiguration');
+    Route::prefix('sms-configuration')->group(function () {
+        Route::post('/test-sms', [App\Http\Controllers\SMSConfigurationController::class, 'testSMS']);
+        Route::post('/send-bulk-reminders', [App\Http\Controllers\SMSConfigurationController::class, 'sendBulkReminders']);
+        Route::get('/default-template', [App\Http\Controllers\SMSConfigurationController::class, 'getDefaultTemplate']);
+        Route::get('/customers-by-end-date', [App\Http\Controllers\SMSConfigurationController::class, 'getCustomersByEndDate']);
+    });
+
+    // Add this route in the admin.auth middleware group
+    Route::get('/test-sms-config', function () {
+        $smsService = app(App\Services\SemaphoreService::class);
+        $config = [
+            'api_key_configured' => !empty(config('services.semaphore.api_key')),
+            'sender_name' => config('services.semaphore.sender_name'),
+        ];
+        
+        return response()->json([
+            'config' => $config,
+            'env' => [
+                'app_env' => config('app.env'),
+                'app_debug' => config('app.debug'),
+            ]
+        ]);
+    });
+
+    // Bill Payment Validation routes
+    Route::prefix('bill-payment-validation')->group(function () {
+        Route::get('/', [App\Http\Controllers\BillPaymentValidationController::class, 'index']);
+        Route::get('/total', [App\Http\Controllers\BillPaymentValidationController::class, 'getTotalPayments']);
+        Route::get('/monthly-totals', [App\Http\Controllers\BillPaymentValidationController::class, 'getMonthlyTotals']);
+        Route::post('/{id}/validate', [App\Http\Controllers\BillPaymentValidationController::class, 'validatePayment']);
+        Route::put('/{id}/status', [App\Http\Controllers\BillPaymentValidationController::class, 'updateStatus']);
+        Route::get('/stats', [App\Http\Controllers\BillPaymentValidationController::class, 'getStats']);
+        Route::get('/{accountNumber}', [App\Http\Controllers\BillPaymentValidationController::class, 'getByCustomer']);
+    });
+
+    // Customer routes
+    Route::prefix('customers')->group(function () {
+        Route::get('/', [CustomerController::class, 'index']);
+        Route::get('/count', [CustomerController::class, 'count']);
+        Route::get('/active-count', [CustomerController::class, 'activeCount']);
+        Route::post('/', [CustomerController::class, 'store']);
+        Route::get('/{id}', [CustomerController::class, 'show']);
+        Route::put('/{id}', [CustomerController::class, 'update']);
+        Route::delete('/{id}', [CustomerController::class, 'destroy']);
+    });
+
+    Route::get('/billing-cycles', function () {
+        return Inertia::render('BillingCycles', ['title' => 'Billing Cycles']);
+    })->name('admin.billing-cycles');
+
+    Route::get('/test-billing-cycles', function () {
+        $supabase = app(\App\Services\SupabaseService::class);
+        try {
+            $select = 'id,customer,account_number,current_reading,previous_reading,amount_due,due_date,status,account_type,billing_period,cycle_date,meter_reading_date,consumption,rate,total_amount,bill_generated,payment_status,remarks,created_at,updated_at';
+            $result = $supabase->query('billing_cycles_tb', $select, []);
+            return response()->json([
+                'success' => true,
+                'config' => [
+                    'url_set' => !empty(config('supabase.url')),
+                    'service_key_set' => !empty(config('supabase.service_role_key')),
+                    'anon_key_set' => !empty(config('supabase.anon_key'))
+                ],
+                'data' => $result
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+        }
+    });
+
+    // Add this debug route after the existing admin routes
+    Route::get('/debug-tickets', function () {
+        try {
+            $supabase = app(\App\Services\SupabaseService::class);
+            $result = $supabase->query('tickets_tb', 'ticket_id,ticket_reference,subject,status', [
+                'order' => 'ticket_id.desc',
+                'limit' => 20
+            ]);
+            
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'tickets' => $result['data']
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'error' => $result['error']
+                ]);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage()
+            ]);
+        }
+    });
+
+    // Export routes
+    Route::prefix('exports')->group(function () {
+        Route::get('/payment-reports/excel', [App\Http\Controllers\ExportController::class, 'exportPaymentReportsExcel'])->name('admin.exports.payment-reports.excel');
+        Route::get('/payment-reports/pdf', [App\Http\Controllers\ExportController::class, 'exportPaymentReportsPdf'])->name('admin.exports.payment-reports.pdf');
+        Route::get('/meter-readings/excel', [App\Http\Controllers\ExportController::class, 'exportMeterReadingsExcel'])->name('admin.exports.meter-readings.excel');
+        Route::get('/meter-readings/pdf', [App\Http\Controllers\ExportController::class, 'exportMeterReadingsPdf'])->name('admin.exports.meter-readings.pdf');
+        Route::get('/announcements/excel', [App\Http\Controllers\ExportController::class, 'exportAnnouncementsExcel'])->name('admin.exports.announcements.excel');
+        Route::get('/announcements/pdf', [App\Http\Controllers\ExportController::class, 'exportAnnouncementsPdf'])->name('admin.exports.announcements.pdf');
+        Route::get('/accounts/excel', [App\Http\Controllers\ExportController::class, 'exportAccountsExcel'])->name('admin.exports.accounts.excel');
+        Route::get('/accounts/pdf', [App\Http\Controllers\ExportController::class, 'exportAccountsPdf'])->name('admin.exports.accounts.pdf');
+    });
 });
 
 // Protected bill handler routes
@@ -98,6 +326,45 @@ Route::middleware(['web', 'admin.auth'])->prefix('bill-handler')->group(function
             ],
         ]);
     })->name('bill-handler.profile');
+
+    Route::get('/profile/data', function () {
+        $user = request()->user();
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'admin_id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+                'address' => $user->address,
+                'contact' => $user->contact,
+                'profile_picture' => $user->profile_picture
+            ]
+        ]);
+    });
+
+    Route::post('/profile/update', function () {
+        $user = request()->user();
+        $validated = request()->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|max:255',
+            'address' => 'nullable|string|max:255',
+            'contact' => 'nullable|string|max:255',
+            'profile_picture' => 'nullable|image|max:2048'
+        ]);
+
+        if (request()->hasFile('profile_picture')) {
+            $path = request()->file('profile_picture')->store('profile-pictures', 'public');
+            $validated['profile_picture'] = $path;
+        }
+
+        $user->update($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Profile updated successfully'
+        ]);
+    });
 
     Route::get('/billing', function () {
         return Inertia::render('BillHandlerBilling');
@@ -401,11 +668,29 @@ Route::post('/test-create-customer', function () {
     }
 });
 
-Route::middleware(['auth'])->group(function () {
-    // Tickets
-    Route::get('/api/tickets', [TicketController::class, 'index']);
-    Route::post('/api/tickets/{id}/remarks', [TicketController::class, 'addRemarks']);
-    Route::put('/api/tickets/{id}', [TicketController::class, 'update']);
+// Add this route for fetching customer by meter_number
+Route::get('/api/customers/by-meter/{meterNumber}', [App\Http\Controllers\CustomerController::class, 'getByMeterNumber']);
+
+
+// Debug route to check CSRF token status
+Route::get('/debug-csrf', function () {
+    return response()->json([
+        'csrf_token' => csrf_token(),
+        'session_id' => session()->getId(),
+        'session_status' => session()->status(),
+        'token_in_session' => session()->token(),
+        'token_in_header' => request()->header('X-CSRF-TOKEN'),
+        'token_in_meta' => request()->header('X-Meta-CSRF-Token'),
+        'cookies' => request()->cookies->all(),
+    ]);
+})->middleware(['web']);
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/billing-cycles', function () {
+        return Inertia::render('BillingCycles');
+    })->name('billing-cycles');
 });
+
+
 
 require __DIR__.'/auth.php';

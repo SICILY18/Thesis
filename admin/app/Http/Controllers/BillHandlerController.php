@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class BillHandlerController extends Controller
 {
@@ -64,21 +65,90 @@ class BillHandlerController extends Controller
     public function getCustomers()
     {
         try {
-            $customers = DB::table('customers_tb')
-                ->select('id', 'name', 'account_number', 'customer_type', 'email', 'contact_number')
-                ->orderBy('name')
-                ->get();
+            Log::info('Getting customers for bill handler');
+
+            // First check if the name columns exist
+            $hasNameColumns = Schema::hasColumns('customers_tb', ['first_name', 'last_name', 'full_name']);
+            $hasOldNameColumn = Schema::hasColumn('customers_tb', 'name');
+
+            Log::info('Table structure check', [
+                'has_name_columns' => $hasNameColumns,
+                'has_old_name_column' => $hasOldNameColumn
+            ]);
+
+            $query = DB::table('customers_tb')->select('id');
+
+            // Add name fields based on what exists
+            if ($hasNameColumns) {
+                $query->addSelect('first_name', 'last_name', 'full_name');
+            } else if ($hasOldNameColumn) {
+                $query->addSelect('name');
+            }
+
+            // Add the rest of the fields - use phone_number instead of contact_number
+            $query->addSelect(
+                'username',
+                'account_number',
+                'customer_type',
+                'address',
+                'phone_number',
+                'email',
+                'meter_number'
+            );
+
+            // Order by the appropriate name column
+            if ($hasNameColumns) {
+                $query->orderBy('full_name');
+            } else if ($hasOldNameColumn) {
+                $query->orderBy('name');
+            } else {
+                $query->orderBy('id');
+            }
+
+            $customers = $query->get();
+
+            // Transform the data to ensure consistent structure
+            $transformedCustomers = $customers->map(function($customer) use ($hasNameColumns, $hasOldNameColumn) {
+                $data = [
+                    'id' => $customer->id,
+                    'full_name' => $hasNameColumns ? $customer->full_name : ($hasOldNameColumn ? $customer->name : ''),
+                    'first_name' => $hasNameColumns ? $customer->first_name : '',
+                    'last_name' => $hasNameColumns ? $customer->last_name : '',
+                    'username' => $customer->username,
+                    'account_number' => $customer->account_number,
+                    'customer_type' => $customer->customer_type,
+                    'address' => $customer->address,
+                    'contact_number' => $customer->phone_number, // Map phone_number to contact_number for consistency
+                    'phone_number' => $customer->phone_number,
+                    'email' => $customer->email,
+                    'meter_number' => $customer->meter_number
+                ];
+                return $data;
+            });
+
+            Log::info('Successfully retrieved customers', [
+                'count' => $customers->count()
+            ]);
 
             return response()->json([
                 'success' => true,
-                'data' => $customers
+                'data' => $transformedCustomers
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Get customers error: ' . $e->getMessage());
+            Log::error('Get customers error: ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'success' => false,
-                'message' => 'An error occurred while fetching customers'
+                'message' => 'An error occurred while fetching customers: ' . $e->getMessage(),
+                'debug' => [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ]
             ], 500);
         }
     }
@@ -102,56 +172,30 @@ class BillHandlerController extends Controller
                 'user_email' => $user->email
             ]);
 
-            // Try to find staff by username first (most likely match)
+            // Try to find staff by username or email
             $staff = DB::table('staff_tb')
                 ->where('username', $user->name)
+                ->orWhere('email', $user->email)
                 ->first();
 
-            Log::info('Staff lookup by username result:', [
-                'searching_for' => $user->name,
+            Log::info('Staff lookup result:', [
+                'searching_for_username' => $user->name,
+                'searching_for_email' => $user->email,
                 'found' => $staff ? true : false,
                 'staff_data' => $staff
             ]);
 
-            // If not found by username, try by email
             if (!$staff) {
-                $staff = DB::table('staff_tb')
-                    ->where('email', $user->email)
-                    ->first();
-                
-                Log::info('Staff lookup by email result:', [
-                    'searching_for' => $user->email,
-                    'found' => $staff ? true : false,
-                    'staff_data' => $staff
-                ]);
-            }
-
-            // If still not found, try by name (full name)
-            if (!$staff) {
-                $staff = DB::table('staff_tb')
-                    ->where('name', $user->name)
-                    ->first();
-                
-                Log::info('Staff lookup by name result:', [
-                    'searching_for' => $user->name,
-                    'found' => $staff ? true : false,
-                    'staff_data' => $staff
-                ]);
-            }
-
-            if (!$staff) {
-                Log::error('Staff record not found for user: ' . $user->name . ' (email: ' . $user->email . ')');
+                // If staff not found, return basic user info
                 return response()->json([
-                    'success' => false,
-                    'message' => 'Staff record not found'
-                ], 404);
+                    'success' => true,
+                    'data' => [
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'role' => 'user'
+                    ]
+                ]);
             }
-
-            Log::info('Staff record found successfully:', [
-                'staff_id' => $staff->id,
-                'staff_name' => $staff->name,
-                'staff_role' => $staff->role
-            ]);
 
             // Handle profile picture - if it exists, make sure it's a URL
             $profilePicture = null;

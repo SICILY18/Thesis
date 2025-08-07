@@ -21,7 +21,7 @@ const AdminLayout = ({ children }) => {
     const fetchProfileData = async () => {
         try {
             console.log('Fetching profile data for header...');
-            const response = await axios.get('/api/admin/profile');
+            const response = await axios.get('/admin/profile');
             if (response.data?.success && response.data?.data?.profile_picture) {
                 console.log('New profile picture URL:', response.data.data.profile_picture);
                 setProfilePicture(response.data.data.profile_picture);
@@ -76,7 +76,7 @@ const AdminLayout = ({ children }) => {
     }, []); // Removed currentPath dependency
 
     return (
-        <div className="min-h-screen bg-[#60B5FF] font-[Poppins] overflow-x-hidden">
+        <div className="min-h-screen font-[Poppins] overflow-x-hidden">
             {/* Sidebar */}
             <div className="fixed left-0 top-0 h-full w-[240px] bg-white shadow-lg transform transition-transform duration-200 lg:translate-x-0 md:translate-x-0 -translate-x-full flex flex-col">
                 <div className="p-3 flex-shrink-0">
@@ -94,7 +94,7 @@ const AdminLayout = ({ children }) => {
                         </Link>
                         <Link href="/admin/accounts" className={`flex items-center px-6 py-3 text-base ${currentPath === '/admin/accounts' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                             <span className="material-symbols-outlined mr-3">manage_accounts</span>
-                            Manage Accounts
+                            Accounts
                         </Link>
                         <Link href="/admin/rate-management" className={`flex items-center px-6 py-3 text-base ${currentPath === '/admin/rate-management' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                             <span className="material-symbols-outlined mr-3">price_change</span>
@@ -102,7 +102,7 @@ const AdminLayout = ({ children }) => {
                         </Link>
                         <Link href="/admin/payment" className={`flex items-center px-6 py-3 text-base ${currentPath === '/admin/payment' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                             <span className="material-symbols-outlined mr-3">payments</span>
-                            Payment
+                            Payments
                         </Link>
                         <Link href="/admin/reports" className={`flex items-center px-6 py-3 text-base ${currentPath === '/admin/reports' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                             <span className="material-symbols-outlined mr-3">description</span>
@@ -122,6 +122,10 @@ const AdminLayout = ({ children }) => {
                         <Link href="/admin/dispute" className={`flex items-center px-6 py-3 text-base ${currentPath === '/admin/dispute' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                             <span className="material-symbols-outlined mr-3">gavel</span>
                             Dispute
+                        </Link>
+                        <Link href="/admin/sms-configuration" className={`flex items-center px-6 py-3 text-base ${currentPath === '/admin/sms-configuration' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                            <span className="material-symbols-outlined mr-3">sms</span>
+                            SMS Configuration
                         </Link>
                         <Link href="/admin/profile" className={`flex items-center px-6 py-3 text-base ${currentPath === '/admin/profile' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                             <span className="material-symbols-outlined mr-3">person</span>
@@ -146,43 +150,12 @@ const AdminLayout = ({ children }) => {
                 <button className="text-gray-600 hover:text-gray-800">
                     <span className="material-symbols-outlined">menu</span>
                 </button>
-                <img src="https://i.postimg.cc/fTdMBwmQ/hermosa-logo.png" alt="Logo" className="h-8" />
+                <img src="https://i.postimg.cc/fTdMBwmQ/hermosa-logo.png" alt="Logo" className="h-8 w-auto" loading="lazy" />
                 <div></div>
             </div>
 
             {/* Main Content */}
-            <div className="lg:ml-[240px] p-3 sm:p-4 md:p-6 lg:p-6 pt-16 lg:pt-6">
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
-                    <h1 className="text-3xl font-bold text-gray-900">
-                        {currentPath === '/admin/dashboard' ? 'Dashboard' :
-                         currentPath === '/admin/announcement' ? 'Announcement' :
-                         currentPath === '/admin/accounts' ? 'Manage Accounts' :
-                         currentPath === '/admin/rate-management' ? 'Rate Management' :
-                         currentPath === '/admin/payment' ? 'Payment Management' :
-                         currentPath === '/admin/reports' ? 'Reports' :
-                         currentPath === '/admin/tickets' ? 'Tickets' :
-                         currentPath === '/admin/dispute' ? 'Dispute Management' :
-                         currentPath === '/admin/profile' ? 'Profile' :
-                         'Admin Dashboard'}
-                    </h1>
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600">{auth?.user?.name}</span>
-                        <Link href="/admin/profile">
-                            <img 
-                                src={profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(auth?.user?.name || 'Admin')}&background=0D8ABC&color=fff`}
-                                alt="Profile" 
-                                className="w-10 h-10 rounded-full cursor-pointer hover:opacity-80 transition-opacity object-cover"
-                                onError={(e) => {
-                                    console.log('Profile image load error:', e.target.src);
-                                    e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(auth?.user?.name || 'Admin')}&background=0D8ABC&color=fff`;
-                                }}
-                            />
-                        </Link>
-                    </div>
-                </div>
-
-                {/* Page Content */}
+            <div className="lg:ml-[240px] min-h-screen bg-[#7EC6F2]">
                 {children}
             </div>
         </div>

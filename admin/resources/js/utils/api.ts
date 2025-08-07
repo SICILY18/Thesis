@@ -1,9 +1,35 @@
-import axios, { AxiosInstance } from 'axios';
+import axios from 'axios';
 
-// Configure axios to include CSRF token
-axios.defaults.headers.common['X-CSRF-TOKEN'] = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
-axios.defaults.withCredentials = true;
+// Create an axios instance
+const api = axios.create({
+    baseURL: '/api',
+    headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+    },
+    withCredentials: true
+});
+
+// Add response interceptor for error handling
+api.interceptors.response.use(
+    response => response,
+    error => {
+        // Handle authentication errors
+        if (error.response?.status === 401) {
+            console.error('Authentication error:', error);
+            window.location.href = '/login';
+        }
+        // Handle other errors
+        else if (error.response?.status === 403) {
+            console.error('Authorization error:', error);
+        }
+        return Promise.reject(error);
+    }
+);
+
+// Export configured axios instance
+export default api;
 
 interface TicketData {
     status: string;
@@ -15,17 +41,6 @@ interface ApiResponse<T> {
     message?: string;
     data?: T;
 }
-
-const api: AxiosInstance = axios.create({
-    baseURL: '/api',
-    headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'),
-        'X-Requested-With': 'XMLHttpRequest'
-    },
-    withCredentials: true
-});
 
 // Ticket APIs
 export const fetchTickets = async (): Promise<ApiResponse<any[]>> => {
@@ -80,6 +95,4 @@ export const fetchCategories = async (): Promise<ApiResponse<Record<string, stri
         console.error('Error fetching categories:', error);
         throw error;
     }
-};
-
-export default api; 
+}; 

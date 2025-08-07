@@ -3,8 +3,9 @@ import { Link, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import Notification from '@/Components/Notification';
 import ConfirmDialog from '@/Components/ConfirmDialog';
-import AdminLayout from '@/Layouts/AdminLayout';
 import DynamicTitleLayout from '@/Layouts/DynamicTitleLayout';
+import TicketCount from '@/Components/TicketCount';
+import clientCache from '@/utils/clientCache';
 
 const iconStyle = {
     cursor: 'pointer',
@@ -59,6 +60,12 @@ const Accounts = () => {
     });
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const [customerTypeFilter, setCustomerTypeFilter] = useState('all');
+    const [loading, setLoading] = useState(true); // Add loading state
+    const [newTicketsCount, setNewTicketsCount] = useState(0);
+    const [viewedTickets, setViewedTickets] = useState(() => {
+        const saved = localStorage.getItem('viewedTickets');
+        return new Set(saved ? JSON.parse(saved) : []);
+    });
 
     // Add validation state
     const [formErrors, setFormErrors] = useState({
@@ -128,12 +135,46 @@ const Accounts = () => {
         });
     }, [accounts, activeTab, searchTerm, customerTypeFilter]);
 
+    const fetchNewTicketsCount = async () => {
+        try {
+            const response = await axios.get('/admin/tickets/data');
+            if (response.data.success) {
+                const savedViewedTickets = new Set(JSON.parse(localStorage.getItem('viewedTickets') || '[]'));
+                
+                const openTickets = response.data.data.filter(ticket => {
+                    const isOpen = ticket.status.toLowerCase() === 'open';
+                    const isUnviewed = !savedViewedTickets.has(ticket.ticket_id);
+                    return isOpen && isUnviewed;
+                });
+                setNewTicketsCount(openTickets.length);
+
+                const newViewedTickets = new Set(savedViewedTickets);
+                response.data.data.forEach(ticket => {
+                    if (ticket.status.toLowerCase() !== 'open') {
+                        newViewedTickets.add(ticket.ticket_id);
+                    }
+                });
+                localStorage.setItem('viewedTickets', JSON.stringify([...newViewedTickets]));
+                setViewedTickets(newViewedTickets);
+            }
+        } catch (error) {
+            console.error('Error fetching new tickets count:', error);
+        }
+    };
+
     useEffect(() => {
         const fetchProfileData = async () => {
             try {
+                const cachedProfile = clientCache.get('admin_profile');
+                if (cachedProfile) {
+                    setProfilePicture(cachedProfile.profile_picture);
+                    return;
+                }
+
                 const response = await axios.get('/api/admin/profile');
                 if (response.data && response.data.profile_picture) {
                     setProfilePicture(response.data.profile_picture);
+                    clientCache.set('admin_profile', response.data, 5 * 60 * 1000); // Cache for 5 minutes
                 }
             } catch (error) {
                 console.error('Error fetching profile:', error);
@@ -141,18 +182,33 @@ const Accounts = () => {
         };
 
         fetchProfileData();
+        fetchNewTicketsCount();
+
+        const profileInterval = setInterval(fetchProfileData, 5000);
+        const ticketsInterval = setInterval(fetchNewTicketsCount, 3000);
+
+        return () => {
+            clearInterval(profileInterval);
+            clearInterval(ticketsInterval);
+        };
     }, []);
 
-    useEffect(() => {
-        
-        // Reset to page 1 when changing tabs or search
-        setPagination(prev => ({ ...prev, current_page: 1 }));
-        fetchAccounts(1);
-    }, [activeTab, searchTerm]);
-
-    const fetchAccounts = async (page = 1) => {
+    async function fetchAccounts(page = 1) {
+        setLoading(true);
         try {
             console.log('Fetching accounts with type:', activeTab, 'page:', page);
+
+            // Try to get from cache first
+            const cacheKey = `accounts_${activeTab}_${searchTerm}_${page}`;
+            const cachedData = clientCache.get(cacheKey);
+            
+            if (cachedData) {
+                setAccounts(cachedData.accounts);
+                setPagination(cachedData.pagination);
+                setLoading(false);
+                return;
+            }
+
             const response = await axios.get(`/api/accounts?type=${activeTab}&search=${searchTerm}&page=${page}`);
             console.log('API Response:', response.data);
             
@@ -163,17 +219,26 @@ const Accounts = () => {
                     id: account.id || `temp-${index}`, // Ensure each account has a unique ID
                     role: account.role?.toLowerCase().trim()
                 }));
+
+                // Update state
                 setAccounts(processedAccounts);
                 
                 // Update pagination state
-                setPagination({
+                const paginationData = {
                     current_page: response.data.data.current_page,
                     last_page: response.data.data.last_page,
                     per_page: response.data.data.per_page,
                     total: response.data.data.total,
                     from: response.data.data.from,
                     to: response.data.data.to
-                });
+                };
+                setPagination(paginationData);
+
+                // Cache the results
+                clientCache.set(cacheKey, {
+                    accounts: processedAccounts,
+                    pagination: paginationData
+                }, 60 * 1000); // Cache for 1 minute
                 
                 console.log('Updated accounts state:', processedAccounts);
                 console.log('Updated pagination state:', response.data.data);
@@ -187,8 +252,15 @@ const Accounts = () => {
             console.error('Error details:', error.response?.data);
             setAccounts([]);
             setPagination(prev => ({ ...prev, total: 0 }));
+            } finally {
+                setLoading(false);
         }
-    };
+    }
+        
+    useEffect(() => {
+        setPagination(prev => ({ ...prev, current_page: 1 }));
+        fetchAccounts(1);
+    }, [activeTab, searchTerm]);
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -780,8 +852,96 @@ const Accounts = () => {
     };
 
     return (
-        <DynamicTitleLayout userRole="admin">
-            <AdminLayout>
+        <DynamicTitleLayout>
+            <div className="min-h-screen bg-[#60B5FF] font-[Poppins] overflow-x-hidden">
+                {/* Sidebar */}
+                <div className="fixed left-0 top-0 h-full w-[240px] bg-white shadow-lg transform transition-transform duration-200 lg:translate-x-0 md:translate-x-0 -translate-x-full flex flex-col">
+                    <div className="p-3 flex-shrink-0">
+                        <img src="https://i.postimg.cc/fTdMBwmQ/hermosa-logo.png" alt="Logo" className="w-50 h-50 mx-auto mb-3" />
+                    </div>
+                    <nav className="flex flex-col flex-1 overflow-y-auto">
+                        <div className="flex-1 pb-4">
+                            <Link href="/admin/dashboard" className="flex items-center px-6 py-3 text-base text-gray-600 hover:bg-gray-50">
+                                <span className="material-symbols-outlined mr-3">dashboard</span>
+                                Dashboard
+                            </Link>
+                            <Link href="/admin/announcement" className="flex items-center px-6 py-3 text-base text-gray-600 hover:bg-gray-50">
+                                <span className="material-symbols-outlined mr-3">campaign</span>
+                                Announcement
+                            </Link>
+                            <Link href="/admin/accounts" className="flex items-center px-6 py-3 text-base text-blue-600 bg-blue-50">
+                                <span className="material-symbols-outlined mr-3">manage_accounts</span>
+                                Accounts
+                            </Link>
+                            <Link href="/admin/rate-management" className="flex items-center px-6 py-3 text-base text-gray-600 hover:bg-gray-50">
+                                <span className="material-symbols-outlined mr-3">price_change</span>
+                                Rate Management
+                            </Link>
+                            <Link href="/admin/payment" className="flex items-center px-6 py-3 text-base text-gray-600 hover:bg-gray-50">
+                                <span className="material-symbols-outlined mr-3">payments</span>
+                                Payments
+                            </Link>
+                            <Link href="/admin/reports" className="flex items-center px-6 py-3 text-base text-gray-600 hover:bg-gray-50">
+                                <span className="material-symbols-outlined mr-3">description</span>
+                                Reports
+                            </Link>
+                            <Link href="/admin/tickets" className="flex items-center px-6 py-3 text-base text-gray-600 hover:bg-gray-50">
+                                <span className="material-symbols-outlined mr-3">confirmation_number</span>
+                                <div className="flex items-center">
+                                    Tickets
+                                    {newTicketsCount > 0 && (
+                                        <span className="ml-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                                            {newTicketsCount}
+                                        </span>
+                                    )}
+                                </div>
+                            </Link>
+                            <Link href="/admin/dispute" className="flex items-center px-6 py-3 text-base text-gray-600 hover:bg-gray-50">
+                                <span className="material-symbols-outlined mr-3">gavel</span>
+                                Dispute
+                            </Link>
+                            <Link href="/admin/sms-configuration" className="flex items-center px-6 py-3 text-base text-gray-600 hover:bg-gray-50">
+                                <span className="material-symbols-outlined mr-3">sms</span>
+                                SMS Configuration
+                            </Link>
+                            <Link href="/admin/profile" className="flex items-center px-6 py-3 text-base text-gray-600 hover:bg-gray-50">
+                                <span className="material-symbols-outlined mr-3">person</span>
+                                Profile
+                            </Link>
+                        </div>
+                        <div className="flex-shrink-0">
+                            <button
+                                data-logout="true"
+                                type="button"
+                                className="flex items-center px-6 py-3 text-base text-gray-600 hover:text-red-600 hover:bg-red-50 w-full text-left"
+                            >
+                                <span className="material-symbols-outlined mr-3">logout</span>
+                                Logout
+                            </button>
+                        </div>
+                    </nav>
+                </div>
+
+                {/* Main Content */}
+                <div className="lg:ml-[240px] p-3 sm:p-4 md:p-6 lg:p-6 pt-16 lg:pt-6">
+                    {/* Header */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+                        <h1 className="text-3xl font-bold text-gray-900">Accounts</h1>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-600">{auth?.user?.name}</span>
+                            <Link href="/admin/profile">
+                                <img 
+                                    src={profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(auth?.user?.name || 'Admin')}&background=0D8ABC&color=fff`}
+                                    alt="Profile" 
+                                    className="w-10 h-10 rounded-full cursor-pointer hover:opacity-80 transition-opacity object-cover"
+                                    onError={(e) => {
+                                        e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(auth?.user?.name || 'Admin')}&background=0D8ABC&color=fff`;
+                                    }}
+                                />
+                            </Link>
+                        </div>
+                    </div>
+
                 {/* Add Account Buttons */}
                 <div className="bg-white rounded-xl shadow-md p-6 mb-6">
                     <div className="flex flex-wrap gap-2">
@@ -883,7 +1043,21 @@ const Accounts = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredAccounts.map((account, index) => {
+                                    {loading ? (
+                                        <tr>
+                                            <td colSpan={activeTab === 'customer' ? 10 : 7} className="py-12 text-center">
+                                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                                                <p className="mt-4 text-gray-600">Loading accounts...</p>
+                                            </td>
+                                        </tr>
+                                    ) : filteredAccounts.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={activeTab === 'customer' ? 10 : 7} className="py-12 text-center text-gray-500">
+                                                No accounts found.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredAccounts.map((account, index) => {
                                     // Generate a truly unique key for each row
                                     const rowKey = `${activeTab}-${account.id || account.account_number || account.username || index}-${index}`;
                                     
@@ -950,7 +1124,8 @@ const Accounts = () => {
                                             )}
                                         </tr>
                                     );
-                                })}
+                                        })
+                                    )}
                             </tbody>
                         </table>
                     </div>
@@ -1074,7 +1249,8 @@ const Accounts = () => {
                     onConfirm={handleConfirmLogout}
                     onCancel={handleCancelLogout}
                 />
-            </AdminLayout>
+                </div>
+            </div>
         </DynamicTitleLayout>
     );
 };

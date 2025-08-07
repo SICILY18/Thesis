@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Rate;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class RateController extends Controller
 {
@@ -18,6 +19,16 @@ class RateController extends Controller
         ]);
 
         try {
+            // Format the rate values to ensure proper decimal storage
+            $minimumCharge = number_format(floatval($request->minimum_charge), 2, '.', '');
+            $ratePerCuM = number_format(floatval($request->rate_per_cu_m), 2, '.', '');
+
+            Log::info('Storing new rate with values:', [
+                'customer_type' => $request->customer_type,
+                'minimum_charge' => $minimumCharge,
+                'rate_per_cu_m' => $ratePerCuM
+            ]);
+
             // First, mark all existing active rates for this customer type as inactive
             DB::table('rates_tb')
                 ->where('customer_type', Str::lower($request->customer_type))
@@ -30,8 +41,8 @@ class RateController extends Controller
             // Then insert the new rate as active
             DB::table('rates_tb')->insert([
                 'customer_type' => Str::lower($request->customer_type),
-                'minimum_charge' => $request->minimum_charge,
-                'rate_per_cu_m' => $request->rate_per_cu_m,
+                'minimum_charge' => $minimumCharge,
+                'rate_per_cu_m' => $ratePerCuM,
                 'effective_datec' => now()->toDateString(),
                 'status' => 'active',
                 'created_at' => now(),
@@ -45,14 +56,17 @@ class RateController extends Controller
         }
     }
 
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $rates = DB::table('rates_tb')
-                ->where('status', 'active')
-                ->orderBy('created_at', 'desc')
-                ->get();
-            
+            $query = DB::table('rates_tb')
+                ->where('status', 'active');
+            // Filter by customer_type if provided
+            if ($request->has('customer_type')) {
+                $customerType = strtolower($request->query('customer_type'));
+                $query->whereRaw('LOWER(customer_type) = ?', [$customerType]);
+            }
+            $rates = $query->orderBy('created_at', 'desc')->get();
             return response()->json($rates);
         } catch (\Exception $e) {
             \Log::error('Failed to fetch rates: ' . $e->getMessage());

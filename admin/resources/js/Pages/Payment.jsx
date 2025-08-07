@@ -108,11 +108,21 @@ const Payment = () => {
     try {
       const response = await axios.get(`/api/customers/${accountNumber}`);
       if (response.data?.success && response.data?.data) {
-        setCustomerAddress(response.data.data.address || 'N/A');
+        setCustomerAddress(response.data.data.address || 'No address provided');
+      } else {
+        setCustomerAddress('No customer data available');
       }
     } catch (error) {
       console.error('Error fetching customer details:', error);
-      setCustomerAddress('N/A');
+      if (error.response?.status === 404) {
+        setCustomerAddress('Customer not found');
+      } else if (error.response?.status === 500) {
+        setCustomerAddress('Error loading customer data');
+        // Log the actual error for debugging
+        console.error('Server error details:', error.response?.data);
+      } else {
+        setCustomerAddress('Unable to load address');
+      }
     }
   };
 
@@ -272,6 +282,14 @@ const Payment = () => {
                     Tickets
                     <TicketCount />
                 </div>
+              </Link>
+              <Link href="/admin/dispute" className={`flex items-center px-6 py-3 text-base ${currentPath === '/admin/dispute' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                <span className="material-symbols-outlined mr-3">gavel</span>
+                Dispute
+              </Link>
+              <Link href="/admin/sms-configuration" className={`flex items-center px-6 py-3 text-base ${currentPath === '/admin/sms-configuration' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                <span className="material-symbols-outlined mr-3">sms</span>
+                SMS Configuration
               </Link>
               <Link href="/admin/profile" className={`flex items-center px-6 py-3 text-base ${currentPath === '/admin/profile' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                 <span className="material-symbols-outlined mr-3">person</span>
@@ -547,7 +565,7 @@ const Payment = () => {
                               </div>
                               <div>
                                 <p className="text-xs font-medium text-gray-500 mb-1">Validation Date</p>
-                                <p className="text-sm text-gray-900">{selectedPayment.validated_at ? formatDate(selectedPayment.validated_at) : 'Not yet validated'}</p>
+                                <p className="text-sm text-gray-900">{selectedPayment.payment_status === 'completed' ? formatDate(selectedPayment.updated_at) : 'Not yet validated'}</p>
                               </div>
                             </div>
                           </div>

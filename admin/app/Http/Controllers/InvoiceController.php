@@ -226,9 +226,9 @@ class InvoiceController extends Controller
 
             // Calculate due date (30 days from reading date)
             $readingDate = new \DateTime($validated['reading_date']);
-            $dueDate = $readingDate->modify('+30 days');
+            $dueDate = (clone $readingDate)->modify('+30 days');
 
-            // Create invoice record first
+            // Create invoice record
             $invoice = Invoice::create([
                 'customer_id' => $customer->id,
                 'reading_id' => $validated['meter_reading_id'],
@@ -242,7 +242,7 @@ class InvoiceController extends Controller
             ]);
 
             // Load customer relationship for PDF generation
-            $invoice->load('customer');
+            $invoice->load(['customer', 'meterReading']);
 
             // Generate PDF
             $pdf = Pdf::loadView('invoice-template', [
@@ -250,42 +250,27 @@ class InvoiceController extends Controller
                 'customer' => $customer
             ]);
 
-            // Create directory if it doesn't exist
-            $invoiceDir = 'invoices/' . date('Y/m');
-            if (!Storage::disk('public')->exists($invoiceDir)) {
-                Storage::disk('public')->makeDirectory($invoiceDir);
-            }
-
-            // Generate filename
-            $filename = "invoice_{$invoice->invoice_id}_{$customer->account_number}_" . date('Y-m-d') . ".pdf";
-            $filepath = $invoiceDir . '/' . $filename;
-
             // Save PDF to storage
-            $pdfContent = $pdf->output();
-            Storage::disk('public')->put($filepath, $pdfContent);
+            $filename = "invoice_{$invoice->id}.pdf";
+            Storage::put("public/invoices/{$filename}", $pdf->output());
 
             // Update invoice with PDF URL
-            $pdfUrl = Storage::disk('public')->url($filepath);
-            $invoice->update(['pdf_url' => $pdfUrl]);
-
-            // Update invoice status to 'Sent' since PDF was generated successfully
-            $invoice->update(['status' => 'Sent']);
+            $invoice->update([
+                'pdf_url' => Storage::url("invoices/{$filename}")
+            ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Invoice PDF generated successfully',
+                'message' => 'Invoice generated successfully',
                 'invoice' => $invoice,
-                'pdf_url' => $pdfUrl,
-                'pdf_filename' => $filename
+                'pdf_url' => $invoice->pdf_url
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Error generating invoice from reading: ' . $e->getMessage());
-            \Log::error('Stack trace: ' . $e->getTraceAsString());
-            
+            \Log::error('Invoice generation failed: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Error generating invoice: ' . $e->getMessage()
+                'message' => 'Failed to generate invoice: ' . $e->getMessage()
             ], 500);
         }
     }

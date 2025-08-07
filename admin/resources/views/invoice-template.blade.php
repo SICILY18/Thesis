@@ -150,6 +150,53 @@
             background-color: #fee2e2;
             color: #991b1b;
         }
+        .reading-details {
+            background-color: #f0f9ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .reading-row {
+            display: table;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .reading-label, .reading-value {
+            display: table-cell;
+            width: 50%;
+        }
+        .reading-label {
+            font-weight: bold;
+            color: #4b5563;
+        }
+        .conservation-tips {
+            background-color: #ecfdf5;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .tip-item {
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: #065f46;
+        }
+        .payment-methods {
+            background-color: #f3f4f6;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .method-item {
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+        .contact-info {
+            background-color: #eff6ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -176,6 +223,10 @@
                 <div class="info-label">DUE DATE</div>
                 <div class="info-value">{{ $invoice->due_date->format('F d, Y') }}</div>
             </div>
+            <div class="info-section">
+                <div class="info-label">BILLING PERIOD</div>
+                <div class="info-value">{{ $invoice->billing_start_date->format('F d, Y') }} - {{ $invoice->billing_end_date->format('F d, Y') }}</div>
+            </div>
         </div>
         <div class="invoice-info-right">
             <div class="info-section">
@@ -193,6 +244,10 @@
                         {{ $invoice->status }}
                     </span>
                 </div>
+            </div>
+            <div class="info-section">
+                <div class="info-label">NUMBER OF DAYS</div>
+                <div class="info-value">{{ $invoice->billing_days }} days</div>
             </div>
         </div>
     </div>
@@ -219,28 +274,82 @@
         </div>
     </div>
 
+    <div class="reading-details">
+        <h3 style="margin-top: 0; margin-bottom: 15px; color: #1f2937;">METER READING DETAILS:</h3>
+        <div class="reading-row">
+            <div class="reading-label">Previous Reading Date:</div>
+            <div class="reading-value">{{ $invoice->previous_reading_date->format('F d, Y') }}</div>
+        </div>
+        <div class="reading-row">
+            <div class="reading-label">Previous Reading:</div>
+            <div class="reading-value">{{ $invoice->previous_reading }} cubic meters</div>
+        </div>
+        <div class="reading-row">
+            <div class="reading-label">Current Reading Date:</div>
+            <div class="reading-value">{{ $invoice->current_reading_date->format('F d, Y') }}</div>
+        </div>
+        <div class="reading-row">
+            <div class="reading-label">Current Reading:</div>
+            <div class="reading-value">{{ $invoice->current_reading }} cubic meters</div>
+        </div>
+        <div class="reading-row">
+            <div class="reading-label">Total Consumption:</div>
+            <div class="reading-value">{{ $invoice->consumption }} cubic meters</div>
+        </div>
+    </div>
+
     <table class="details-table">
         <thead>
             <tr>
                 <th>DESCRIPTION</th>
-                <th>METER READING</th>
                 <th>RATE</th>
+                <th>CONSUMPTION</th>
                 <th>AMOUNT</th>
             </tr>
         </thead>
         <tbody>
             <tr>
-                <td>Water Consumption</td>
-                <td>{{ $invoice->reading_value }} cubic meters</td>
-                <td>Per cubic meter</td>
-                <td>₱{{ number_format($invoice->amount, 2) }}</td>
+                <td>Base Rate</td>
+                <td>₱{{ number_format($invoice->base_rate, 2) }}</td>
+                <td>-</td>
+                <td>₱{{ number_format($invoice->base_rate, 2) }}</td>
             </tr>
-            @if($invoice->notes)
             <tr>
-                <td colspan="4">
-                    <div class="info-label">NOTES</div>
-                    <div style="font-style: italic; color: #6b7280;">{{ $invoice->notes }}</div>
-                </td>
+                <td>Water Consumption</td>
+                <td>₱{{ number_format($invoice->consumption_rate, 2) }}/m³</td>
+                <td>{{ $invoice->consumption }} m³</td>
+                <td>₱{{ number_format($invoice->consumption_charge, 2) }}</td>
+            </tr>
+            @if($invoice->environmental_fee > 0)
+            <tr>
+                <td>Environmental Fee</td>
+                <td>-</td>
+                <td>-</td>
+                <td>₱{{ number_format($invoice->environmental_fee, 2) }}</td>
+            </tr>
+            @endif
+            @if($invoice->maintenance_fee > 0)
+            <tr>
+                <td>Maintenance Fee</td>
+                <td>-</td>
+                <td>-</td>
+                <td>₱{{ number_format($invoice->maintenance_fee, 2) }}</td>
+            </tr>
+            @endif
+            @if($invoice->previous_balance > 0)
+            <tr>
+                <td>Previous Balance</td>
+                <td>-</td>
+                <td>-</td>
+                <td>₱{{ number_format($invoice->previous_balance, 2) }}</td>
+            </tr>
+            @endif
+            @if($invoice->late_payment_charge > 0)
+            <tr>
+                <td>Late Payment Charge</td>
+                <td>-</td>
+                <td>-</td>
+                <td>₱{{ number_format($invoice->late_payment_charge, 2) }}</td>
             </tr>
             @endif
         </tbody>
@@ -249,37 +358,58 @@
     <div class="amount-section">
         <div class="amount-row">
             <div class="amount-label">Subtotal:</div>
-            <div class="amount-value">₱{{ number_format($invoice->amount, 2) }}</div>
+            <div class="amount-value">₱{{ number_format($invoice->subtotal, 2) }}</div>
         </div>
+        @if($invoice->discount > 0)
         <div class="amount-row">
-            <div class="amount-label">Service Charge:</div>
-            <div class="amount-value">₱0.00</div>
+            <div class="amount-label">Discount:</div>
+            <div class="amount-value">-₱{{ number_format($invoice->discount, 2) }}</div>
         </div>
-        <div class="amount-row">
-            <div class="amount-label">Tax:</div>
-            <div class="amount-value">₱0.00</div>
-        </div>
+        @endif
         <div class="amount-row total-amount">
             <div class="amount-label">TOTAL AMOUNT DUE:</div>
-            <div class="amount-value">₱{{ number_format($invoice->amount, 2) }}</div>
+            <div class="amount-value">₱{{ number_format($invoice->total_amount, 2) }}</div>
         </div>
     </div>
 
     <div class="payment-info">
-        <h4 style="margin-top: 0; color: #92400e;">PAYMENT INSTRUCTIONS</h4>
-        <p style="margin: 0; font-size: 12px;">
-            Please pay your bill on or before the due date to avoid late charges. 
-            Payment can be made at our office, online through our website, or at any authorized payment center.
-            @if($invoice->sent_via)
-            <br><strong>Sent via:</strong> {{ $invoice->sent_via }}
-            @endif
-        </p>
+        <h4 style="margin-top: 0; color: #92400e;">PAYMENT INFORMATION</h4>
+        <p style="margin-bottom: 5px;">Please pay on or before: <strong>{{ $invoice->due_date->format('F d, Y') }}</strong></p>
+        <p style="margin-bottom: 5px;">A late payment charge of 2% will be added to unpaid balances after the due date.</p>
+        @if($invoice->status === 'OVERDUE')
+        <p style="color: #991b1b; font-weight: bold;">DISCONNECTION NOTICE: Service may be disconnected if payment is not received within 48 hours.</p>
+        @endif
+    </div>
+
+    <div class="payment-methods">
+        <h4 style="margin-top: 0; color: #1f2937;">PAYMENT METHODS</h4>
+        <div class="method-item">• Cash payment at our office during business hours</div>
+        <div class="method-item">• Online bank transfer</div>
+        <div class="method-item">• Mobile payment apps (GCash, Maya)</div>
+        <div class="method-item">• Authorized payment centers</div>
+    </div>
+
+    <div class="conservation-tips">
+        <h4 style="margin-top: 0; color: #065f46;">WATER CONSERVATION TIPS</h4>
+        <div class="tip-item">• Fix leaky faucets and pipes promptly</div>
+        <div class="tip-item">• Use water-efficient fixtures and appliances</div>
+        <div class="tip-item">• Water plants during early morning or late evening</div>
+        <div class="tip-item">• Collect and use rainwater for gardening</div>
+    </div>
+
+    <div class="contact-info">
+        <h4 style="margin-top: 0; color: #1e40af;">CONTACT INFORMATION</h4>
+        <p><strong>Customer Service:</strong> (555) 123-4567</p>
+        <p><strong>Emergency Hotline:</strong> (555) 987-6543</p>
+        <p><strong>Email:</strong> support@waterutility.com</p>
+        <p><strong>Office Hours:</strong> Monday to Friday, 8:00 AM - 5:00 PM</p>
+        <p><strong>Website:</strong> www.waterutility.com</p>
     </div>
 
     <div class="footer">
-        <p>Thank you for using our water utility services!</p>
-        <p>This is a computer-generated invoice. No signature required.</p>
-        <p>Generated on {{ now()->format('F d, Y \a\t g:i A') }}</p>
+        <p>This is a computer-generated document. No signature required.</p>
+        <p>Please keep this invoice for your records.</p>
+        <p>Thank you for your prompt payment!</p>
     </div>
 </body>
 </html> 

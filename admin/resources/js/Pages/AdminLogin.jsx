@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { router, Head } from '@inertiajs/react';
 import api from '@/utils/api';
 
@@ -8,39 +8,65 @@ const AdminLogin = () => {
     const [error, setError] = useState('');
     const [rememberMe, setRememberMe] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
-
-    useEffect(() => {
-        const getCsrfToken = async () => {
-            await api.get('/sanctum/csrf-cookie');
-        };
-        getCsrfToken();
-    }, []);
+    const [loading, setLoading] = useState(false);
 
     const handleLogin = async (e) => {
         e.preventDefault();
         setError('');
+        setLoading(true);
 
         try {
+            // First get CSRF cookie
+            await api.get('/sanctum/csrf-cookie');
+            
+            // Attempt login
             const response = await api.post('/admin-login', {
                 username,
                 password,
+                remember: rememberMe
             });
 
-            if (response.data.success) {
+            console.log('Login response:', response);
+
+            // Only proceed if response explicitly indicates success
+            if (response.data && response.data.success === true) {
                 const userRole = response.data.user.role;
+                
+                console.log('Login successful, user role:', userRole);
+
                 if (userRole === 'admin') {
-                    router.visit('/admin/dashboard');
+                    window.location.href = '/admin/dashboard';
                 } else if (userRole === 'bill handler') {
-                    router.visit('/bill-handler/dashboard');
+                    window.location.href = '/bill-handler/dashboard';
                 } else {
                     setError('You do not have permission to access this system.');
                 }
             } else {
-                setError(response.data.message || 'Login failed. Please check your credentials.');
+                // If success is not explicitly true, treat as error
+                console.log('Login failed - success not true:', response.data);
+                setError('Invalid credentials. Please try again.');
             }
         } catch (error) {
             console.error('Login error:', error);
-            setError(error.response?.data?.message || 'Login failed. Please try again.');
+            console.error('Error response:', error.response);
+            
+            if (error.response?.status === 401) {
+                setError('Invalid credentials. Please try again.');
+            } else if (error.response?.status === 403) {
+                setError('You do not have permission to access this system.');
+            } else if (error.response?.status === 422) {
+                const validationErrors = error.response.data.errors;
+                if (validationErrors) {
+                    const errorMessage = Object.values(validationErrors).flat().join(', ');
+                    setError(`Validation error: ${errorMessage}`);
+                }
+            } else if (error.response?.data?.message) {
+                setError(error.response.data.message);
+            } else {
+                setError('Login failed. Please try again.');
+            }
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -72,6 +98,7 @@ const AdminLogin = () => {
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
                                 required
+                                disabled={loading}
                             />
                         </div>
                         <div className="mb-4">
@@ -87,12 +114,14 @@ const AdminLogin = () => {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
+                                    disabled={loading}
                                 />
                                 <button
                                     type="button"
                                     className="absolute right-3 top-2 text-gray-400"
                                     onClick={() => setShowPassword(!showPassword)}
                                     tabIndex={-1}
+                                    disabled={loading}
                                 >
                                     {showPassword ? (
                                         <span className="material-symbols-outlined">visibility_off</span>
@@ -109,6 +138,7 @@ const AdminLogin = () => {
                                 checked={rememberMe}
                                 onChange={() => setRememberMe(!rememberMe)}
                                 className="mr-2"
+                                disabled={loading}
                             />
                             <label htmlFor="remember" className="text-white text-sm">
                                 Remember me
@@ -116,9 +146,12 @@ const AdminLogin = () => {
                         </div>
                         <button
                             type="submit"
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded transition"
+                            className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded transition ${
+                                loading ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                            disabled={loading}
                         >
-                            Sign in
+                            {loading ? 'Signing in...' : 'Sign in'}
                         </button>
                     </form>
                 </div>

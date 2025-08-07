@@ -31,4 +31,10 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'semaphore' => [
+        'api_key' => env('SEMAPHORE_API_KEY', 'ce3848a2ce6b6ba492b9365aa6056906'),
+        'sender_name' => env('SEMAPHORE_SENDER_NAME', 'HWDIST'),
+        'api_url' => 'https://api.semaphore.co/api/v4/messages',
+    ],
+
 ];

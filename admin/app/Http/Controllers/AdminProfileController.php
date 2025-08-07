@@ -150,7 +150,9 @@ class AdminProfileController extends Controller
                 'success' => true,
                 'data' => [
                     'admin_id' => $staff->id,
+                    'id' => $staff->id, // Add Staff ID
                     'name' => $staff->name,
+                    'username' => $staff->username ?? '', // Add Username
                     'address' => $staff->address ?? '',
                     'contact' => $staff->contact_number ?? '',
                     'email' => $staff->email ?? '',
@@ -213,7 +215,7 @@ class AdminProfileController extends Controller
             $updateData = [
                 'name' => $request->name,
                 'address' => $request->address,
-                'contact_number' => $request->contact,
+                'contact_number' => $request->contact ?: $staff->contact_number, // Use existing if empty
                 'email' => $request->email,
                 'updated_at' => now()
             ];
@@ -310,9 +312,11 @@ class AdminProfileController extends Controller
                 'profile_picture' => $profilePictureUrl,
                 'data' => [
                     'admin_id' => $updatedStaff->id,
+                    'id' => $updatedStaff->id, // Add Staff ID
                     'name' => $updatedStaff->name,
+                    'username' => $updatedStaff->username ?? '', // Add Username
                     'address' => $updatedStaff->address,
-                    'contact_number' => $updatedStaff->contact_number,
+                    'contact' => $updatedStaff->contact_number,
                     'email' => $updatedStaff->email,
                     'role' => $updatedStaff->role
                 ]

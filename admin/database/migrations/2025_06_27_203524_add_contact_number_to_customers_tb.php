@@ -14,7 +14,9 @@ return new class extends Migration
     public function up()
     {
         Schema::table('customers_tb', function (Blueprint $table) {
-            //
+            if (!Schema::hasColumn('customers_tb', 'contact_number')) {
+                $table->string('contact_number')->nullable();
+            }
         });
     }
 
@@ -26,7 +28,9 @@ return new class extends Migration
     public function down()
     {
         Schema::table('customers_tb', function (Blueprint $table) {
-            //
+            if (Schema::hasColumn('customers_tb', 'contact_number')) {
+                $table->dropColumn('contact_number');
+            }
         });
     }
 };

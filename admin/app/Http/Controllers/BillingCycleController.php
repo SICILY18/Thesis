@@ -24,19 +24,41 @@ class BillingCycleController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
+            \Log::info('Fetching billing cycles with filters:', $request->all());
+            
             $filters = [
                 'account_type' => $request->get('account_type'),
                 'billing_period' => $request->get('billing_period'),
                 'search' => $request->get('search'),
-                'status' => $request->get('status')
+                'status' => $request->get('status'),
+                'bill_status' => $request->get('bill_status'),
+                'limit' => $request->get('limit', 10),
+                'offset' => $request->get('offset', 0)
             ];
 
-            $billingCycles = $this->billingCycleService->getBillingCyclesWithFilters($filters);
+            $result = $this->billingCycleService->getBillingCyclesWithFilters($filters);
             
-            return response()->json($billingCycles);
+            if (!$result['success']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to fetch billing cycles',
+                    'data' => []
+                ], 500);
+            }
+
+            return response()->json($result['data']);
+
         } catch (\Exception $e) {
-            Log::error('Billing cycles fetch error: ' . $e->getMessage());
-            return response()->json([]);
+            \Log::error('Error in BillingCycleController@index:', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while fetching billing cycles',
+                'data' => []
+            ], 500);
         }
     }
 
@@ -99,14 +121,21 @@ class BillingCycleController extends Controller
         try {
             $billingCycle = DB::table('billing_cycles_tb')
                 ->join('customers_tb', 'billing_cycles_tb.customer_id', '=', 'customers_tb.id')
-                ->select(
-                    'billing_cycles_tb.*',
+                ->select([
+                    'billing_cycles_tb.id',
+                    'billing_cycles_tb.billing_start_date',
+                    'billing_cycles_tb.billing_end_date',
+                    'billing_cycles_tb.status',
+                    'billing_cycles_tb.bill_status',
+                    'billing_cycles_tb.amount_due',
+                    'billing_cycles_tb.created_at',
+                    'billing_cycles_tb.updated_at',
                     'customers_tb.full_name as customer_name',
                     'customers_tb.account_number',
                     'customers_tb.customer_type as account_type',
                     'customers_tb.email',
-                    'customers_tb.contact_number'
-                )
+                    'customers_tb.phone_number'
+                ])
                 ->where('billing_cycles_tb.id', $id)
                 ->first();
 
@@ -130,15 +159,19 @@ class BillingCycleController extends Controller
             $validated = $request->validate([
                 'billing_start_date' => 'sometimes|date',
                 'billing_end_date' => 'sometimes|date',
-                'status' => 'sometimes|string|in:active,inactive',
+                'status' => 'sometimes|string|in:paid,unpaid',
                 'amount_due' => 'sometimes|numeric|min:0'
             ]);
 
-            $updated = DB::table('billing_cycles_tb')
-                ->where('id', $id)
-                ->update($validated);
+            $supabase = app(\App\Services\SupabaseService::class);
+            
+            $result = $supabase->update(
+                'billing_cycles_tb',
+                $validated,
+                ['id' => "eq.{$id}"]
+            );
 
-            if ($updated) {
+            if ($result['success']) {
                 return response()->json([
                     'success' => true,
                     'message' => 'Billing cycle updated successfully'
@@ -164,11 +197,14 @@ class BillingCycleController extends Controller
     public function destroy($id): JsonResponse
     {
         try {
-            $deleted = DB::table('billing_cycles_tb')
-                ->where('id', $id)
-                ->delete();
+            $supabase = app(\App\Services\SupabaseService::class);
+            
+            $result = $supabase->delete(
+                'billing_cycles_tb',
+                ['id' => "eq.{$id}"]
+            );
 
-            if ($deleted) {
+            if ($result['success']) {
                 return response()->json([
                     'success' => true,
                     'message' => 'Billing cycle deleted successfully'
@@ -251,6 +287,33 @@ class BillingCycleController extends Controller
                 'active_cycles' => 0,
                 'inactive_cycles' => 0
             ]);
+        }
+    }
+
+    /**
+     * Get the total number of active billing cycles
+     */
+    public function getActiveCount()
+    {
+        try {
+            $supabase = app(\App\Services\SupabaseService::class);
+            
+            $result = $supabase->query(
+                'billing_cycles_tb',
+                'id',
+                ['status' => 'eq.active']
+            );
+
+            if ($result['success']) {
+                $count = count($result['data']);
+                return response()->json(['active_count' => $count]);
+            } else {
+                Log::error('Error fetching active billing cycles count: ' . ($result['message'] ?? 'Unknown error'));
+                return response()->json(['active_count' => 0]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error in getActiveCount: ' . $e->getMessage());
+            return response()->json(['active_count' => 0]);
         }
     }
 } 
