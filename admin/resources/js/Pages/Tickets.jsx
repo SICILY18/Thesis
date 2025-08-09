@@ -17,50 +17,34 @@ const Tickets = () => {
 
     const statusOptions = [
         { value: 'All Status', label: 'All Status' },
-        { value: 'Open', label: 'Open' },
+        { value: 'Pending', label: 'Pending' },
         { value: 'In Progress', label: 'In Progress' },
         { value: 'Resolved', label: 'Resolved' }
     ];
 
-    const statusColors = {
-        'Open': 'bg-yellow-200 text-yellow-800',
-        'In Progress': 'bg-blue-200 text-blue-800',
-        'Resolved': 'bg-green-200 text-green-800'
+    const STATUS_COLORS = {
+        'Pending': { bg: '#FFC107', fg: '#000000' },
+        'In Progress': { bg: '#2196F3', fg: '#FFFFFF' },
+        'Resolved': { bg: '#4CAF50', fg: '#FFFFFF' }
     };
 
-    const getStatusColor = (status) => {
-        return statusColors[status] || 'bg-gray-100 text-gray-800';
-    };
-
-    const getStatusStyle = (status) => {
-        // Normalize the status to lowercase for comparison
-        const normalizedStatus = status?.toLowerCase();
-        
-        const styles = {
-            'open': 'bg-green-200 text-green-800',
-            'in progress': 'bg-yellow-200 text-yellow-800',
-            'resolved': 'bg-red-300 text-red-800'
-        };
-
-        // Get the style based on normalized status
-        const style = styles[normalizedStatus] || 'bg-gray-200 text-gray-900';
-        return `${style} px-3 py-1 rounded-full text-sm font-semibold flex items-center justify-center min-w-[100px]`;
+    const getStatusBadgeStyle = (status) => {
+        const label = formatStatus(status);
+        const colors = STATUS_COLORS[label] || { bg: '#E5E7EB', fg: '#111827' };
+        return { backgroundColor: colors.bg, color: colors.fg };
     };
 
     const formatStatus = (status) => {
-        // Map old status values to new ones
-        const statusMap = {
-            'pending': 'In Progress',
-            'closed': 'Resolved',
-            'open': 'Open',
+        // Normalize legacy values to the new three statuses
+        const map = {
+            'open': 'Pending',
+            'pending': 'Pending',
             'in progress': 'In Progress',
-            'resolved': 'Resolved'
+            'resolved': 'Resolved',
+            'closed': 'Resolved'
         };
-
-        // Convert to lowercase for comparison
-        const normalizedStatus = status?.toLowerCase();
-        // Return mapped status with proper capitalization or original status if no mapping exists
-        return statusMap[normalizedStatus] || status;
+        const normalized = (status || '').toLowerCase();
+        return map[normalized] || status || 'Pending';
     };
 
     useEffect(() => {
@@ -110,7 +94,7 @@ const Tickets = () => {
             ticket.subject?.toLowerCase().includes(searchQuery.toLowerCase());
         
         const matchesStatus = selectedStatus === 'All Status' || 
-            ticket.status === selectedStatus;
+            formatStatus(ticket.status) === selectedStatus;
         
         const matchesDate = !selectedDate || 
             new Date(ticket.created_at).toISOString().split('T')[0] === selectedDate;
@@ -157,24 +141,28 @@ const Tickets = () => {
     const handleStatusChange = async (ticketId, newStatus, remarks = "") => {
         setUpdateLoading(true);
         try {
-            // Refresh CSRF token before making the request
-            await axios.get('/sanctum/csrf-cookie');
             const response = await axios.put(`/admin/tickets/${ticketId}`, {
                 status: newStatus,
                 remarks: remarks || `Status changed to ${newStatus}`
             });
             if (response.data.success) {
                 const updatedTicket = response.data.data;
-                setTickets(tickets.map(ticket => 
-                    ticket.ticket_id === updatedTicket.ticket_id ? updatedTicket : ticket
+                // Update list immediately
+                setTickets(prev => prev.map(ticket => 
+                    ticket.ticket_id === updatedTicket.ticket_id ? { ...ticket, ...updatedTicket } : ticket
                 ));
+                // Update modal immediately if open
+                setViewingTicket(prev => prev && prev.ticket_id === updatedTicket.ticket_id 
+                    ? { ...prev, ...updatedTicket } 
+                    : prev
+                );
                 // Mark the ticket as viewed in localStorage when status changes
                 const viewedTickets = new Set(JSON.parse(localStorage.getItem('viewedTickets') || '[]'));
                 viewedTickets.add(ticketId);
                 localStorage.setItem('viewedTickets', JSON.stringify([...viewedTickets]));
                 toast.success('Ticket status updated successfully');
                 setNewRemarks(''); // Clear remarks after successful update
-                fetchTickets();
+                // No refetch needed; state is already updated
             } else {
                 throw new Error(response.data.message || 'Failed to update ticket status');
             }
@@ -182,9 +170,8 @@ const Tickets = () => {
             console.error('Error updating ticket status:', error);
             if (error.response?.status === 419) {
                 toast.error('Session expired. Please refresh the page and try again.');
-                // Try to refresh CSRF token and retry the request
+                // Try to retry the request once more
                 try {
-                    await axios.get('/sanctum/csrf-cookie');
                     // Retry the request after token refresh
                     const response = await axios.put(`/admin/tickets/${ticketId}`, {
                         status: newStatus,
@@ -192,12 +179,15 @@ const Tickets = () => {
                     });
                     if (response.data.success) {
                         const updatedTicket = response.data.data;
-                        setTickets(tickets.map(ticket => 
-                            ticket.ticket_id === updatedTicket.ticket_id ? updatedTicket : ticket
+                        setTickets(prev => prev.map(ticket => 
+                            ticket.ticket_id === updatedTicket.ticket_id ? { ...ticket, ...updatedTicket } : ticket
                         ));
+                        setViewingTicket(prev => prev && prev.ticket_id === updatedTicket.ticket_id 
+                            ? { ...prev, ...updatedTicket } 
+                            : prev
+                        );
                         toast.success('Ticket status updated successfully');
                         setNewRemarks(''); // Clear remarks after successful update
-                        fetchTickets();
                     }
                 } catch (retryError) {
                     toast.error('Failed to update ticket status. Please try again.');
@@ -213,6 +203,7 @@ const Tickets = () => {
     // Add logging when setting the viewing ticket
     const handleViewTicket = (ticket) => {
         console.log('Setting viewing ticket:', ticket);
+        console.log('Image URL in ticket:', ticket.image_url);
         setViewingTicket(ticket);
     };
 
@@ -308,12 +299,10 @@ const Tickets = () => {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-center">
                                             <div className="flex justify-center items-center">
-                                                <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full justify-center items-center text-center ${
-                                                    ticket.status?.toLowerCase() === 'open' ? 'bg-green-100 text-green-800' :
-                                                    ticket.status?.toLowerCase() === 'in progress' ? 'bg-yellow-100 text-yellow-800' :
-                                                    ticket.status?.toLowerCase() === 'resolved' ? 'bg-red-100 text-red-800' :
-                                                    'bg-gray-100 text-gray-800'
-                                                }`} style={{ minWidth: '70px', display: 'inline-flex' }}>
+                                                <span
+                                                    className={'px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full justify-center items-center text-center'}
+                                                    style={{ minWidth: '90px', display: 'inline-flex', ...getStatusBadgeStyle(ticket.status) }}
+                                                >
                                                     {formatStatus(ticket.status)}
                                                 </span>
                                             </div>
@@ -388,8 +377,11 @@ const Tickets = () => {
                                             <div className="grid grid-cols-3 gap-2 items-center">
                                                 <label className="text-sm font-medium text-gray-700">Status:</label>
                                                 <span className="col-span-2">
-                                                    <span className={`px-3 py-1 inline-flex text-sm font-semibold rounded-full ${getStatusStyle(viewingTicket.status)}`}>
-                                                        {viewingTicket.status}
+                                                    <span
+                                                        className={'px-3 py-1 inline-flex text-sm font-semibold rounded-full'}
+                                                        style={getStatusBadgeStyle(viewingTicket.status)}
+                                                    >
+                                                        {formatStatus(viewingTicket.status)}
                                                     </span>
                                                 </span>
                                             </div>
@@ -418,6 +410,30 @@ const Tickets = () => {
                                     <h3 className="text-lg font-semibold mb-2">Description</h3>
                                     <p className="text-sm text-gray-700">{viewingTicket.description}</p>
                                 </div>
+
+                                {/* Image Display */}
+                                {viewingTicket.image_url && (
+                                    <div className="mt-6">
+                                        <h3 className="text-lg font-semibold mb-2">Attached Image</h3>
+                                        <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                            <img 
+                                                src={viewingTicket.image_url} 
+                                                alt="Ticket attachment"
+                                                className="max-w-full h-auto max-h-96 rounded-lg shadow-sm"
+                                                onError={(e) => {
+                                                    e.target.style.display = 'none';
+                                                    e.target.nextSibling.style.display = 'block';
+                                                }}
+                                            />
+                                            <div 
+                                                className="text-sm text-gray-500 italic hidden"
+                                                style={{ display: 'none' }}
+                                            >
+                                                Image could not be loaded
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Update Form */}
                                 <div className="mt-6">

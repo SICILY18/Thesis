@@ -38,18 +38,20 @@ const AdminLayout = ({ children }) => {
                 // Get viewed tickets from localStorage
                 const savedViewedTickets = new Set(JSON.parse(localStorage.getItem('viewedTickets') || '[]'));
                 
-                // Only count tickets that are 'open' and haven't been viewed
-                const openTickets = response.data.data.filter(ticket => {
-                    const isOpen = ticket.status.toLowerCase() === 'open';
+                // Count tickets that are 'Pending' (or legacy 'open') and haven't been viewed
+                const pendingTickets = response.data.data.filter(ticket => {
+                    const normalized = (ticket.status || '').toLowerCase();
+                    const isPending = normalized === 'pending' || normalized === 'open';
                     const isUnviewed = !savedViewedTickets.has(ticket.ticket_id);
-                    return isOpen && isUnviewed;
+                    return isPending && isUnviewed;
                 });
-                setNewTicketsCount(openTickets.length);
+                setNewTicketsCount(pendingTickets.length);
 
                 // Update viewed tickets for non-open tickets
                 const newViewedTickets = new Set(savedViewedTickets);
                 response.data.data.forEach(ticket => {
-                    if (ticket.status.toLowerCase() !== 'open') {
+                    const normalized = (ticket.status || '').toLowerCase();
+                    if (normalized !== 'pending' && normalized !== 'open') {
                         newViewedTickets.add(ticket.ticket_id);
                     }
                 });

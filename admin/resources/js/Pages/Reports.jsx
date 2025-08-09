@@ -59,6 +59,18 @@ const Reports = () => {
     const [loading, setLoading] = useState(false);
     const [exporting, setExporting] = useState(false);
 
+    // Printable report states
+    const [showPaymentReport, setShowPaymentReport] = useState(false);
+    const [showMeterReport, setShowMeterReport] = useState(false);
+    const [showAnnouncementReport, setShowAnnouncementReport] = useState(false);
+    const [showAccountsReport, setShowAccountsReport] = useState(false);
+    
+    // Printable report data
+    const [printablePaymentData, setPrintablePaymentData] = useState(null);
+    const [printableMeterData, setPrintableMeterData] = useState(null);
+    const [printableAnnouncementData, setPrintableAnnouncementData] = useState(null);
+    const [printableAccountsData, setPrintableAccountsData] = useState(null);
+
     useEffect(() => {
         const fetchProfileData = async () => {
             try {
@@ -393,12 +405,12 @@ const Reports = () => {
     };
 
     // Export functions
-    const handleExportPaymentReportsExcel = async () => {
+    const handleExportPaymentReportsPdf = async () => {
         setExporting(true);
         try {
-            // Fetch ALL payment reports data (not just current page)
-            console.log('Fetching all payment reports for export...');
+            console.log('Loading payment reports for printing...');
 
+            // Fetch all payment reports data
             const response = await axios.get('/admin/bill-payment-validation', {
                 params: {
                     per_page: 10000, // Large number to get all records
@@ -410,10 +422,9 @@ const Reports = () => {
                 }
             });
 
-            let allPaymentReports = [];
             if (response.data && response.data.success) {
                 const responseData = response.data.data;
-                allPaymentReports = responseData.data.map(payment => {
+                const allPaymentReports = responseData.data.map(payment => {
                     return {
                         id: payment.id,
                         payment_date: payment.payment_date || 'N/A',
@@ -430,77 +441,35 @@ const Reports = () => {
                         validated_at: payment.validated_at || null
                     };
                 });
+
+                const totalAmount = allPaymentReports.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
+                
+                setPrintablePaymentData({
+                    payments: allPaymentReports,
+                    total_records: allPaymentReports.length,
+                    total_amount: totalAmount,
+                    generated_at: new Date().toLocaleString()
+                });
+                setShowPaymentReport(true);
             }
-
-            console.log(`Exporting ${allPaymentReports.length} payment records to Excel...`);
-
-            // Create CSV content from ALL payment reports data
-            const csvHeaders = [
-                'Payment Date',
-                'Customer',
-                'Account Number',
-                'Period',
-                'Amount',
-                'Payment Method',
-                'Reference',
-                'Status',
-                'Account Type',
-                'Bill Amount',
-                'Due Date',
-                'Validated At'
-            ];
-
-            let csvContent = csvHeaders.join(',') + '\n';
-
-            allPaymentReports.forEach(payment => {
-                const row = [
-                    payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() : 'N/A',
-                    `"${(payment.customer || 'N/A').replace(/"/g, '""')}"`,
-                    payment.account_number || 'N/A',
-                    `"${(payment.period || 'N/A').replace(/"/g, '""')}"`,
-                    parseFloat(payment.amount || 0).toFixed(2),
-                    `"${(payment.payment_method || 'N/A').replace(/"/g, '""')}"`,
-                    `"${(payment.reference || 'N/A').replace(/"/g, '""')}"`,
-                    payment.status === 'completed' ? 'PAID' : payment.status === 'pending' ? 'UNPAID' : (payment.status || 'N/A').toUpperCase(),
-                    payment.account_type || 'N/A',
-                    parseFloat(payment.bill_amount || 0).toFixed(2),
-                    payment.due_date ? new Date(payment.due_date).toLocaleDateString() : 'N/A',
-                    payment.validated_at ? new Date(payment.validated_at).toLocaleString() : 'N/A'
-                ];
-                csvContent += row.join(',') + '\n';
-            });
-
-            // Create and download the file
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', `payment_reports_all_${new Date().toISOString().split('T')[0]}.csv`);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
         } catch (error) {
-            console.error('Error exporting payment reports to Excel:', error);
-            alert('Error exporting payment reports. Please try again.');
+            console.error('Error loading payment reports for printing:', error);
+            alert('Error loading payment reports. Please try again.');
         } finally {
             setExporting(false);
         }
     };
 
-
-
-    const handleExportMeterReadingsExcel = async () => {
+    const handleExportMeterReadingsPdf = async () => {
         setExporting(true);
         try {
-            // Fetch ALL meter readings data (not just current page)
-            console.log('Fetching all meter readings for export...');
+            console.log('Loading meter readings for printing...');
 
-            const response = await axios.get('/api/meter-readings', {
+            // Fetch all meter readings data
+            const response = await axios.get('/admin/meter-readings', {
                 params: {
                     per_page: 10000, // Large number to get all records
-                    account_type: accountType !== 'All' ? accountType : 'All'
+                    accountType: accountType !== 'All' ? accountType : null
                 },
                 headers: {
                     'Accept': 'application/json',
@@ -508,10 +477,9 @@ const Reports = () => {
                 }
             });
 
-            let allMeterReadings = [];
             if (response.data && response.data.success) {
                 const responseData = response.data.data;
-                allMeterReadings = responseData.data.map(reading => {
+                const allMeterReadings = responseData.data.map(reading => {
                     return {
                         id: reading.id,
                         reading_date: reading.reading_date || 'N/A',
@@ -524,63 +492,32 @@ const Reports = () => {
                         remarks: reading.remarks || reading.notes || 'N/A'
                     };
                 });
+
+                const totalAmount = allMeterReadings.reduce((sum, reading) => sum + parseFloat(reading.amount || 0), 0);
+                
+                setPrintableMeterData({
+                    readings: allMeterReadings,
+                    total_records: allMeterReadings.length,
+                    total_amount: totalAmount,
+                    account_type_filter: accountType,
+                    generated_at: new Date().toLocaleString()
+                });
+                setShowMeterReport(true);
             }
-
-            console.log(`Exporting ${allMeterReadings.length} meter reading records to Excel...`);
-
-            // Create CSV content from ALL meter readings data
-            const csvHeaders = [
-                'Reading Date',
-                'Customer Name',
-                'Account Number',
-                'Meter Number',
-                'Reading Value',
-                'Amount',
-                'Account Type',
-                'Remarks'
-            ];
-
-            let csvContent = csvHeaders.join(',') + '\n';
-
-            allMeterReadings.forEach(reading => {
-                const row = [
-                    reading.reading_date ? new Date(reading.reading_date).toLocaleDateString() : 'N/A',
-                    `"${(reading.customer_name || 'N/A').replace(/"/g, '""')}"`,
-                    reading.account_number || 'N/A',
-                    reading.meter_number || 'N/A',
-                    reading.reading_value || 'N/A',
-                    parseFloat(reading.amount || 0).toFixed(2),
-                    reading.account_type || 'N/A',
-                    `"${(reading.remarks || 'N/A').replace(/"/g, '""')}"`
-                ];
-                csvContent += row.join(',') + '\n';
-            });
-
-            // Create and download the file
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', `meter_readings_all_${new Date().toISOString().split('T')[0]}.csv`);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
         } catch (error) {
-            console.error('Error exporting meter readings to Excel:', error);
-            alert('Error exporting meter readings. Please try again.');
+            console.error('Error loading meter readings for printing:', error);
+            alert('Error loading meter readings. Please try again.');
         } finally {
             setExporting(false);
         }
     };
 
-    const handleExportAnnouncementsExcel = async () => {
+    const handleExportAnnouncementsPdf = async () => {
         setExporting(true);
         try {
-            // Fetch ALL announcements data (not just current page)
-            console.log('Fetching all announcements for export...');
+            console.log('Loading announcements for printing...');
 
+            // Fetch all announcements data
             const response = await axios.get('/api/announcements/history', {
                 params: {
                     per_page: 10000, // Large number to get all records
@@ -592,10 +529,9 @@ const Reports = () => {
                 }
             });
 
-            let allAnnouncements = [];
             if (response.data && response.data.success) {
                 const responseData = response.data.data;
-                allAnnouncements = responseData.data.map(announcement => {
+                const allAnnouncements = responseData.data.map(announcement => {
                     return {
                         id: announcement.id,
                         title: announcement.title || 'N/A',
@@ -605,80 +541,43 @@ const Reports = () => {
                         updated_at: announcement.updated_at || 'N/A'
                     };
                 });
-            } else if (response.data && Array.isArray(response.data)) {
-                // Handle direct array response
-                allAnnouncements = response.data.map(announcement => {
-                    return {
-                        id: announcement.id,
-                        title: announcement.title || 'N/A',
-                        body: announcement.body || announcement.content || announcement.message || 'N/A',
-                        status: announcement.status || 'N/A',
-                        created_at: announcement.created_at || 'N/A',
-                        updated_at: announcement.updated_at || 'N/A'
-                    };
+                
+                setPrintableAnnouncementData({
+                    announcements: allAnnouncements,
+                    total_records: allAnnouncements.length,
+                    status_filter: announcementStatus,
+                    generated_at: new Date().toLocaleString()
                 });
+                setShowAnnouncementReport(true);
             }
-
-            console.log(`Exporting ${allAnnouncements.length} announcement records to Excel...`);
-
-            // Create CSV content from ALL announcements data
-            const csvHeaders = [
-                'Title',
-                'Body',
-                'Status',
-                'Created At',
-                'Updated At'
-            ];
-
-            let csvContent = csvHeaders.join(',') + '\n';
-
-            allAnnouncements.forEach(announcement => {
-                const row = [
-                    `"${(announcement.title || 'N/A').replace(/"/g, '""')}"`,
-                    `"${(announcement.body || 'N/A').replace(/"/g, '""')}"`,
-                    announcement.status || 'N/A',
-                    announcement.created_at ? new Date(announcement.created_at).toLocaleString() : 'N/A',
-                    announcement.updated_at ? new Date(announcement.updated_at).toLocaleString() : 'N/A'
-                ];
-                csvContent += row.join(',') + '\n';
-            });
-
-            // Create and download the file
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', `announcements_all_${new Date().toISOString().split('T')[0]}.csv`);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
         } catch (error) {
-            console.error('Error exporting announcements to Excel:', error);
-            alert('Error exporting announcements. Please try again.');
+            console.error('Error loading announcements for printing:', error);
+            alert('Error loading announcements. Please try again.');
         } finally {
             setExporting(false);
         }
     };
 
-    const handleExportAccountsExcel = async () => {
+    const handleExportAccountsPdf = async () => {
         setExporting(true);
         try {
-            // Fetch ALL accounts data (not just current page)
-            console.log('Fetching all accounts for export...');
+            console.log('Loading accounts for printing...');
 
-            const response = await axios.get('/api/customers', {
+            // Fetch all accounts data
+            const response = await axios.get('/api/accounts', {
+                params: {
+                    type: accountsType.toLowerCase(),
+                    per_page: 10000
+                },
                 headers: {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json'
                 }
             });
 
-            let allAccounts = [];
-            if (response.data && response.data.success && response.data.data) {
-                // Handle structured response with success flag
-                allAccounts = response.data.data.map(account => {
+            if (response.data && response.data.success) {
+                const responseData = response.data.data;
+                const allAccounts = responseData.data.map(account => {
                     return {
                         id: account.id,
                         full_name: account.full_name || account.name || 'N/A',
@@ -691,67 +590,18 @@ const Reports = () => {
                         created_at: account.created_at || account.date_created || 'N/A'
                     };
                 });
-            } else if (response.data && Array.isArray(response.data)) {
-                // Handle direct array response
-                allAccounts = response.data.map(account => {
-                    return {
-                        id: account.id,
-                        full_name: account.full_name || account.name || 'N/A',
-                        account_number: account.account_number || 'N/A',
-                        account_type: account.customer_type || account.account_type || account.type || 'N/A',
-                        address: account.address || account.location || 'N/A',
-                        contact_number: account.phone_number || account.contact_number || account.phone || account.mobile || 'N/A',
-                        email: account.email || account.email_address || 'N/A',
-                        status: account.status || account.account_status || 'Active',
-                        created_at: account.created_at || account.date_created || 'N/A'
-                    };
+                
+                setPrintableAccountsData({
+                    accounts: allAccounts,
+                    total_records: allAccounts.length,
+                    account_type_filter: accountsType,
+                    generated_at: new Date().toLocaleString()
                 });
+                setShowAccountsReport(true);
             }
-
-            console.log(`Exporting ${allAccounts.length} account records to Excel...`);
-
-            // Create CSV content from ALL accounts data
-            const csvHeaders = [
-                'Full Name',
-                'Account Number',
-                'Account Type',
-                'Address',
-                'Contact Number',
-                'Email',
-                'Status',
-                'Created At'
-            ];
-
-            let csvContent = csvHeaders.join(',') + '\n';
-
-            allAccounts.forEach(account => {
-                const row = [
-                    `"${(account.full_name || 'N/A').replace(/"/g, '""')}"`,
-                    account.account_number || 'N/A',
-                    account.account_type || 'N/A',
-                    `"${(account.address || 'N/A').replace(/"/g, '""')}"`,
-                    account.contact_number || 'N/A',
-                    account.email || 'N/A',
-                    account.status || 'N/A',
-                    account.created_at ? new Date(account.created_at).toLocaleString() : 'N/A'
-                ];
-                csvContent += row.join(',') + '\n';
-            });
-
-            // Create and download the file
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', `accounts_all_${new Date().toISOString().split('T')[0]}.csv`);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
         } catch (error) {
-            console.error('Error exporting accounts to Excel:', error);
-            alert('Error exporting accounts. Please try again.');
+            console.error('Error loading accounts for printing:', error);
+            alert('Error loading accounts. Please try again.');
         } finally {
             setExporting(false);
         }
@@ -849,6 +699,543 @@ const Reports = () => {
                             </button>
                         </nav>
                     </div>
+                </div>
+            </div>
+        );
+    };
+
+    // Printable Report Components
+    const PrintablePaymentReport = ({ data, onClose }) => {
+        if (!data) return null;
+
+        return (
+            <div className="bg-white p-4 mb-6">
+                <style jsx>{`
+                    @media print {
+                        @page {
+                            size: A4 landscape;
+                            margin: 0.5in;
+                        }
+                        body {
+                            font-size: 10px !important;
+                            line-height: 1.2 !important;
+                        }
+                        .print-table {
+                            font-size: 8px !important;
+                            line-height: 1.1 !important;
+                        }
+                        .print-table th,
+                        .print-table td {
+                            padding: 2px 4px !important;
+                            white-space: nowrap !important;
+                            overflow: hidden !important;
+                            text-overflow: ellipsis !important;
+                        }
+                        .no-print {
+                            display: none !important;
+                        }
+                    }
+                `}</style>
+                
+                <div className="flex justify-between items-center mb-4 no-print">
+                    <h2 className="text-xl font-bold text-gray-900">Payment Reports - Printable View</h2>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => window.print()}
+                            className="flex items-center px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                            <span className="material-symbols-outlined mr-1 text-sm">print</span>
+                            Print to PDF
+                        </button>
+                        <button
+                            onClick={onClose}
+                            className="flex items-center px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                        >
+                            <span className="material-symbols-outlined mr-1 text-sm">close</span>
+                            Close
+                        </button>
+                    </div>
+                </div>
+
+                <div className="text-center mb-4 border-b-2 border-gray-300 pb-2">
+                    <h1 className="text-xl font-bold text-gray-900 mb-1">Payment Reports</h1>
+                    <p className="text-sm text-gray-600">Generated on: {data.generated_at}</p>
+                    <p className="text-sm text-gray-600">Hermosa Water District Management System</p>
+                </div>
+
+                <div className="bg-gray-50 p-2 rounded mb-4">
+                    <div className="flex justify-center gap-6 text-sm">
+                        <div className="font-bold">
+                            <span className="text-gray-700">Total Records:</span> {data.total_records.toLocaleString()}
+                        </div>
+                        <div className="font-bold">
+                            <span className="text-gray-700">Total Amount:</span> ₱{data.total_amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse border border-gray-300 print-table" style={{fontSize: '8px'}}>
+                        <thead>
+                            <tr className="bg-gray-100">
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '8%'}}>Date</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '12%'}}>Customer</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '8%'}}>Account#</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '8%'}}>Period</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '8%'}}>Amount</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '8%'}}>Method</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '10%'}}>Reference</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '6%'}}>Status</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '8%'}}>Type</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '8%'}}>Bill Amt</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '8%'}}>Due Date</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '8%'}}>Validated</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {data.payments.map((payment) => (
+                                <tr key={payment.id}>
+                                    <td className="border border-gray-300 px-1 py-1" style={{fontSize: '7px'}}>
+                                        {payment.payment_date !== 'N/A' ? new Date(payment.payment_date).toLocaleDateString('en-US', {month: '2-digit', day: '2-digit', year: '2-digit'}) : 'N/A'}
+                                    </td>
+                                    <td className="border border-gray-300 px-1 py-1" style={{fontSize: '7px', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} title={payment.customer}>
+                                        {payment.customer.length > 15 ? payment.customer.substring(0, 15) + '...' : payment.customer}
+                                    </td>
+                                    <td className="border border-gray-300 px-1 py-1 text-center" style={{fontSize: '7px'}}>{payment.account_number}</td>
+                                    <td className="border border-gray-300 px-1 py-1" style={{fontSize: '7px'}}>
+                                        {payment.period.length > 8 ? payment.period.substring(0, 8) + '...' : payment.period}
+                                    </td>
+                                    <td className="border border-gray-300 px-1 py-1 text-right" style={{fontSize: '7px'}}>
+                                        ₱{parseFloat(payment.amount).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                                    </td>
+                                    <td className="border border-gray-300 px-1 py-1" style={{fontSize: '7px'}}>
+                                        {payment.payment_method.length > 8 ? payment.payment_method.substring(0, 8) + '...' : payment.payment_method}
+                                    </td>
+                                    <td className="border border-gray-300 px-1 py-1" style={{fontSize: '7px'}}>
+                                        {payment.reference.length > 12 ? payment.reference.substring(0, 12) + '...' : payment.reference}
+                                    </td>
+                                    <td className="border border-gray-300 px-1 py-1 text-center" style={{fontSize: '7px'}}>
+                                        <span className={`px-1 py-0.5 rounded text-xs ${
+                                            payment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                            payment.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                            'bg-red-100 text-red-800'
+                                        }`} style={{fontSize: '6px'}}>
+                                            {payment.status === 'completed' ? 'PAID' : 
+                                             payment.status === 'pending' ? 'UNPAID' : 
+                                             payment.status.toUpperCase().substring(0, 6)}
+                                        </span>
+                                    </td>
+                                    <td className="border border-gray-300 px-1 py-1" style={{fontSize: '7px'}}>
+                                        {payment.account_type.length > 8 ? payment.account_type.substring(0, 8) + '...' : payment.account_type}
+                                    </td>
+                                    <td className="border border-gray-300 px-1 py-1 text-right" style={{fontSize: '7px'}}>
+                                        ₱{parseFloat(payment.bill_amount).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                                    </td>
+                                    <td className="border border-gray-300 px-1 py-1" style={{fontSize: '7px'}}>
+                                        {payment.due_date !== 'N/A' ? new Date(payment.due_date).toLocaleDateString('en-US', {month: '2-digit', day: '2-digit', year: '2-digit'}) : 'N/A'}
+                                    </td>
+                                    <td className="border border-gray-300 px-1 py-1" style={{fontSize: '7px'}}>
+                                        {payment.validated_at ? new Date(payment.validated_at).toLocaleDateString('en-US', {month: '2-digit', day: '2-digit'}) : '-'}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="text-center mt-4 text-xs text-gray-600 border-t border-gray-300 pt-2">
+                    <p>Report contains {data.total_records.toLocaleString()} payment records with total amount of ₱{data.total_amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}.</p>
+                    <p>To save as PDF, use your browser's "Print" function and select "Save as PDF" as the destination.</p>
+                </div>
+            </div>
+        );
+    };
+
+    const PrintableMeterReport = ({ data, onClose }) => {
+        if (!data) return null;
+
+        return (
+            <div className="bg-white p-4 mb-6">
+                <style jsx>{`
+                    @media print {
+                        @page {
+                            size: A4 landscape;
+                            margin: 0.5in;
+                        }
+                        body {
+                            font-size: 10px !important;
+                            line-height: 1.2 !important;
+                        }
+                        .print-table {
+                            font-size: 9px !important;
+                            line-height: 1.1 !important;
+                        }
+                        .print-table th,
+                        .print-table td {
+                            padding: 3px 5px !important;
+                            white-space: nowrap !important;
+                            overflow: hidden !important;
+                            text-overflow: ellipsis !important;
+                        }
+                        .no-print {
+                            display: none !important;
+                        }
+                    }
+                `}</style>
+                
+                <div className="flex justify-between items-center mb-4 no-print">
+                    <h2 className="text-xl font-bold text-gray-900">Meter Readings Report - Printable View</h2>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => window.print()}
+                            className="flex items-center px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                            <span className="material-symbols-outlined mr-1 text-sm">print</span>
+                            Print to PDF
+                        </button>
+                        <button
+                            onClick={onClose}
+                            className="flex items-center px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                        >
+                            <span className="material-symbols-outlined mr-1 text-sm">close</span>
+                            Close
+                        </button>
+                    </div>
+                </div>
+
+                <div className="text-center mb-4 border-b-2 border-gray-300 pb-2">
+                    <h1 className="text-xl font-bold text-gray-900 mb-1">Meter Readings Report</h1>
+                    <p className="text-sm text-gray-600">Generated on: {data.generated_at}</p>
+                    {data.account_type_filter && data.account_type_filter !== 'All' && (
+                        <p className="text-sm text-gray-600">Filtered by Account Type: {data.account_type_filter}</p>
+                    )}
+                    <p className="text-sm text-gray-600">Hermosa Water District Management System</p>
+                </div>
+
+                <div className="bg-gray-50 p-2 rounded mb-4">
+                    <div className="flex justify-center gap-6 text-sm">
+                        <div className="font-bold">
+                            <span className="text-gray-700">Total Records:</span> {data.total_records.toLocaleString()}
+                        </div>
+                        <div className="font-bold">
+                            <span className="text-gray-700">Total Amount:</span> ₱{data.total_amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                        </div>
+                        {data.account_type_filter && data.account_type_filter !== 'All' && (
+                            <div className="font-bold">
+                                <span className="text-gray-700">Account Type:</span> {data.account_type_filter}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse border border-gray-300 print-table" style={{fontSize: '9px'}}>
+                        <thead>
+                            <tr className="bg-gray-100">
+                                <th className="border border-gray-300 px-2 py-1 text-xs font-bold text-center" style={{width: '12%'}}>Reading Date</th>
+                                <th className="border border-gray-300 px-2 py-1 text-xs font-bold text-center" style={{width: '18%'}}>Customer Name</th>
+                                <th className="border border-gray-300 px-2 py-1 text-xs font-bold text-center" style={{width: '12%'}}>Account#</th>
+                                <th className="border border-gray-300 px-2 py-1 text-xs font-bold text-center" style={{width: '12%'}}>Meter#</th>
+                                <th className="border border-gray-300 px-2 py-1 text-xs font-bold text-center" style={{width: '10%'}}>Reading</th>
+                                <th className="border border-gray-300 px-2 py-1 text-xs font-bold text-center" style={{width: '12%'}}>Amount</th>
+                                <th className="border border-gray-300 px-2 py-1 text-xs font-bold text-center" style={{width: '12%'}}>Type</th>
+                                <th className="border border-gray-300 px-2 py-1 text-xs font-bold text-center" style={{width: '12%'}}>Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {data.readings.map((reading) => (
+                                <tr key={reading.id}>
+                                    <td className="border border-gray-300 px-2 py-1" style={{fontSize: '8px'}}>
+                                        {reading.reading_date !== 'N/A' ? new Date(reading.reading_date).toLocaleDateString('en-US', {month: '2-digit', day: '2-digit', year: '2-digit'}) : 'N/A'}
+                                    </td>
+                                    <td className="border border-gray-300 px-2 py-1" style={{fontSize: '8px', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} title={reading.customer_name}>
+                                        {reading.customer_name.length > 20 ? reading.customer_name.substring(0, 20) + '...' : reading.customer_name}
+                                    </td>
+                                    <td className="border border-gray-300 px-2 py-1 text-center" style={{fontSize: '8px'}}>{reading.account_number}</td>
+                                    <td className="border border-gray-300 px-2 py-1 text-center" style={{fontSize: '8px'}}>{reading.meter_number}</td>
+                                    <td className="border border-gray-300 px-2 py-1 text-right" style={{fontSize: '8px'}}>{reading.reading_value}</td>
+                                    <td className="border border-gray-300 px-2 py-1 text-right" style={{fontSize: '8px'}}>
+                                        ₱{parseFloat(reading.amount).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                                    </td>
+                                    <td className="border border-gray-300 px-2 py-1 text-center" style={{fontSize: '8px'}}>
+                                        <span className={`px-1 py-0.5 rounded text-xs ${
+                                            reading.account_type === 'Residential' ? 'bg-blue-100 text-blue-800' :
+                                            reading.account_type === 'Commercial' ? 'bg-green-100 text-green-800' :
+                                            reading.account_type === 'Government' ? 'bg-purple-100 text-purple-800' :
+                                            'bg-gray-100 text-gray-800'
+                                        }`} style={{fontSize: '7px'}}>
+                                            {reading.account_type.substring(0, 8)}
+                                        </span>
+                                    </td>
+                                    <td className="border border-gray-300 px-2 py-1" style={{fontSize: '8px', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} title={reading.remarks}>
+                                        {reading.remarks.length > 12 ? reading.remarks.substring(0, 12) + '...' : reading.remarks}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="text-center mt-4 text-xs text-gray-600 border-t border-gray-300 pt-2">
+                    <p>Report contains {data.total_records.toLocaleString()} meter reading records with total amount of ₱{data.total_amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}.</p>
+                    <p>To save as PDF, use your browser's "Print" function and select "Save as PDF" as the destination.</p>
+                </div>
+            </div>
+        );
+    };
+
+    const PrintableAnnouncementReport = ({ data, onClose }) => {
+        if (!data) return null;
+
+        return (
+            <div className="bg-white p-4 mb-6">
+                <style jsx>{`
+                    @media print {
+                        @page {
+                            size: A4 landscape;
+                            margin: 0.5in;
+                        }
+                        body {
+                            font-size: 10px !important;
+                            line-height: 1.2 !important;
+                        }
+                        .print-table {
+                            font-size: 9px !important;
+                            line-height: 1.1 !important;
+                        }
+                        .print-table th,
+                        .print-table td {
+                            padding: 3px 5px !important;
+                            white-space: nowrap !important;
+                            overflow: hidden !important;
+                            text-overflow: ellipsis !important;
+                        }
+                        .no-print {
+                            display: none !important;
+                        }
+                    }
+                `}</style>
+                
+                <div className="flex justify-between items-center mb-4 no-print">
+                    <h2 className="text-xl font-bold text-gray-900">Announcements Report - Printable View</h2>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => window.print()}
+                            className="flex items-center px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                            <span className="material-symbols-outlined mr-1 text-sm">print</span>
+                            Print to PDF
+                        </button>
+                        <button
+                            onClick={onClose}
+                            className="flex items-center px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                        >
+                            <span className="material-symbols-outlined mr-1 text-sm">close</span>
+                            Close
+                        </button>
+                    </div>
+                </div>
+
+                <div className="text-center mb-4 border-b-2 border-gray-300 pb-2">
+                    <h1 className="text-xl font-bold text-gray-900 mb-1">Announcements Report</h1>
+                    <p className="text-sm text-gray-600">Generated on: {data.generated_at}</p>
+                    {data.status_filter && data.status_filter !== 'All' && (
+                        <p className="text-sm text-gray-600">Filtered by Status: {data.status_filter.charAt(0).toUpperCase() + data.status_filter.slice(1)}</p>
+                    )}
+                    <p className="text-sm text-gray-600">Hermosa Water District Management System</p>
+                </div>
+
+                <div className="bg-gray-50 p-2 rounded mb-4">
+                    <div className="flex justify-center gap-6 text-sm">
+                        <div className="font-bold">
+                            <span className="text-gray-700">Total Records:</span> {data.total_records.toLocaleString()}
+                        </div>
+                        {data.status_filter && data.status_filter !== 'All' && (
+                            <div className="font-bold">
+                                <span className="text-gray-700">Status Filter:</span> {data.status_filter.charAt(0).toUpperCase() + data.status_filter.slice(1)}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse border border-gray-300 print-table" style={{fontSize: '9px'}}>
+                        <thead>
+                            <tr className="bg-gray-100">
+                                <th className="border border-gray-300 px-2 py-1 text-xs font-bold text-center" style={{width: '25%'}}>Title</th>
+                                <th className="border border-gray-300 px-2 py-1 text-xs font-bold text-center" style={{width: '35%'}}>Body</th>
+                                <th className="border border-gray-300 px-2 py-1 text-xs font-bold text-center" style={{width: '10%'}}>Status</th>
+                                <th className="border border-gray-300 px-2 py-1 text-xs font-bold text-center" style={{width: '15%'}}>Created At</th>
+                                <th className="border border-gray-300 px-2 py-1 text-xs font-bold text-center" style={{width: '15%'}}>Updated At</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {data.announcements.map((announcement) => (
+                                <tr key={announcement.id}>
+                                    <td className="border border-gray-300 px-2 py-1" style={{fontSize: '8px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} title={announcement.title}>
+                                        {announcement.title.length > 25 ? announcement.title.substring(0, 25) + '...' : announcement.title}
+                                    </td>
+                                    <td className="border border-gray-300 px-2 py-1" style={{fontSize: '8px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} title={announcement.body}>
+                                        {announcement.body.length > 50 ? announcement.body.substring(0, 50) + '...' : announcement.body}
+                                    </td>
+                                    <td className="border border-gray-300 px-2 py-1 text-center" style={{fontSize: '8px'}}>
+                                        <span className={`px-1 py-0.5 rounded text-xs ${
+                                            announcement.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                        }`} style={{fontSize: '7px'}}>
+                                            {announcement.status.charAt(0).toUpperCase() + announcement.status.slice(1)}
+                                        </span>
+                                    </td>
+                                    <td className="border border-gray-300 px-2 py-1" style={{fontSize: '8px'}}>
+                                        {announcement.created_at !== 'N/A' ? new Date(announcement.created_at).toLocaleDateString('en-US', {month: '2-digit', day: '2-digit', year: '2-digit'}) : 'N/A'}
+                                    </td>
+                                    <td className="border border-gray-300 px-2 py-1" style={{fontSize: '8px'}}>
+                                        {announcement.updated_at !== 'N/A' ? new Date(announcement.updated_at).toLocaleDateString('en-US', {month: '2-digit', day: '2-digit', year: '2-digit'}) : 'N/A'}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="text-center mt-4 text-xs text-gray-600 border-t border-gray-300 pt-2">
+                    <p>Report contains {data.total_records.toLocaleString()} announcement records.</p>
+                    <p>To save as PDF, use your browser's "Print" function and select "Save as PDF" as the destination.</p>
+                </div>
+            </div>
+        );
+    };
+
+    const PrintableAccountsReport = ({ data, onClose }) => {
+        if (!data) return null;
+
+        return (
+            <div className="bg-white p-4 mb-6">
+                <style jsx>{`
+                    @media print {
+                        @page {
+                            size: A4 landscape;
+                            margin: 0.5in;
+                        }
+                        body {
+                            font-size: 10px !important;
+                            line-height: 1.2 !important;
+                        }
+                        .print-table {
+                            font-size: 8px !important;
+                            line-height: 1.1 !important;
+                        }
+                        .print-table th,
+                        .print-table td {
+                            padding: 2px 3px !important;
+                            white-space: nowrap !important;
+                            overflow: hidden !important;
+                            text-overflow: ellipsis !important;
+                        }
+                        .no-print {
+                            display: none !important;
+                        }
+                    }
+                `}</style>
+                
+                <div className="flex justify-between items-center mb-4 no-print">
+                    <h2 className="text-xl font-bold text-gray-900">Accounts Report - Printable View</h2>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => window.print()}
+                            className="flex items-center px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                            <span className="material-symbols-outlined mr-1 text-sm">print</span>
+                            Print to PDF
+                        </button>
+                        <button
+                            onClick={onClose}
+                            className="flex items-center px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                        >
+                            <span className="material-symbols-outlined mr-1 text-sm">close</span>
+                            Close
+                        </button>
+                    </div>
+                </div>
+
+                <div className="text-center mb-4 border-b-2 border-gray-300 pb-2">
+                    <h1 className="text-xl font-bold text-gray-900 mb-1">Accounts Report</h1>
+                    <p className="text-sm text-gray-600">Generated on: {data.generated_at}</p>
+                    {data.account_type_filter && data.account_type_filter !== 'All' && (
+                        <p className="text-sm text-gray-600">Filtered by Account Type: {data.account_type_filter.charAt(0).toUpperCase() + data.account_type_filter.slice(1)}</p>
+                    )}
+                    <p className="text-sm text-gray-600">Hermosa Water District Management System</p>
+                </div>
+
+                <div className="bg-gray-50 p-2 rounded mb-4">
+                    <div className="flex justify-center gap-6 text-sm">
+                        <div className="font-bold">
+                            <span className="text-gray-700">Total Records:</span> {data.total_records.toLocaleString()}
+                        </div>
+                        {data.account_type_filter && data.account_type_filter !== 'All' && (
+                            <div className="font-bold">
+                                <span className="text-gray-700">Account Type:</span> {data.account_type_filter.charAt(0).toUpperCase() + data.account_type_filter.slice(1)}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse border border-gray-300 print-table" style={{fontSize: '8px'}}>
+                        <thead>
+                            <tr className="bg-gray-100">
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '18%'}}>Full Name</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '10%'}}>Account#</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '10%'}}>Type</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '20%'}}>Address</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '12%'}}>Contact</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '15%'}}>Email</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '8%'}}>Status</th>
+                                <th className="border border-gray-300 px-1 py-1 text-xs font-bold text-center" style={{width: '7%'}}>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {data.accounts.map((account) => (
+                                <tr key={account.id}>
+                                    <td className="border border-gray-300 px-1 py-1" style={{fontSize: '7px', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} title={account.full_name}>
+                                        {account.full_name.length > 22 ? account.full_name.substring(0, 22) + '...' : account.full_name}
+                                    </td>
+                                    <td className="border border-gray-300 px-1 py-1 text-center" style={{fontSize: '7px'}}>{account.account_number}</td>
+                                    <td className="border border-gray-300 px-1 py-1 text-center" style={{fontSize: '7px'}}>
+                                        <span className={`px-1 py-0.5 rounded text-xs ${
+                                            account.account_type === 'Residential' ? 'bg-blue-100 text-blue-800' :
+                                            account.account_type === 'Commercial' ? 'bg-green-100 text-green-800' :
+                                            account.account_type === 'Government' ? 'bg-purple-100 text-purple-800' :
+                                            'bg-gray-100 text-gray-800'
+                                        }`} style={{fontSize: '6px'}}>
+                                            {account.account_type.substring(0, 8)}
+                                        </span>
+                                    </td>
+                                    <td className="border border-gray-300 px-1 py-1" style={{fontSize: '7px', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} title={account.address}>
+                                        {account.address.length > 28 ? account.address.substring(0, 28) + '...' : account.address}
+                                    </td>
+                                    <td className="border border-gray-300 px-1 py-1" style={{fontSize: '7px'}}>{account.contact_number}</td>
+                                    <td className="border border-gray-300 px-1 py-1" style={{fontSize: '7px', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} title={account.email}>
+                                        {account.email.length > 18 ? account.email.substring(0, 18) + '...' : account.email}
+                                    </td>
+                                    <td className="border border-gray-300 px-1 py-1 text-center" style={{fontSize: '7px'}}>
+                                        <span className={`px-1 py-0.5 rounded text-xs ${
+                                            account.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                        }`} style={{fontSize: '6px'}}>
+                                            {account.status.charAt(0).toUpperCase() + account.status.slice(1)}
+                                        </span>
+                                    </td>
+                                    <td className="border border-gray-300 px-1 py-1" style={{fontSize: '7px'}}>
+                                        {account.created_at !== 'N/A' ? new Date(account.created_at).toLocaleDateString('en-US', {month: '2-digit', day: '2-digit', year: '2-digit'}) : 'N/A'}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="text-center mt-4 text-xs text-gray-600 border-t border-gray-300 pt-2">
+                    <p>Report contains {data.total_records.toLocaleString()} account records.</p>
+                    <p>To save as PDF, use your browser's "Print" function and select "Save as PDF" as the destination.</p>
                 </div>
             </div>
         );
@@ -999,6 +1386,17 @@ const Reports = () => {
                         {/* Payment Report Table */}
                         {activeTab === 'paymentReport' && (
                             <div>
+                                {/* Show Printable Report if active */}
+                                {showPaymentReport && (
+                                    <PrintablePaymentReport 
+                                        data={printablePaymentData} 
+                                        onClose={() => {
+                                            setShowPaymentReport(false);
+                                            setPrintablePaymentData(null);
+                                        }} 
+                                    />
+                                )}
+
                                 {/* Payment Report Filter Section */}
                                 <div className="flex items-center justify-between mb-6 p-4 bg-gray-50 rounded-lg">
                                     <div className="flex items-center gap-4">
@@ -1006,12 +1404,12 @@ const Reports = () => {
 
                         {/* Export Buttons */}
                                         <button
-                                            onClick={handleExportPaymentReportsExcel}
+                                            onClick={handleExportPaymentReportsPdf}
                                             disabled={exporting}
                                             className="flex items-center px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                 <span className="material-symbols-outlined mr-1 text-sm">download</span>
-                                {exporting ? 'Exporting...' : 'Export to Excel'}
+                                {exporting ? 'Exporting...' : 'Export to PDF'}
                             </button>
                                     </div>
                                     <div className="text-sm text-gray-600">
@@ -1141,6 +1539,17 @@ const Reports = () => {
                         {/* Meter Reading Report Table */}
                         {activeTab === 'meter' && (
                             <div>
+                                {/* Show Printable Report if active */}
+                                {showMeterReport && (
+                                    <PrintableMeterReport 
+                                        data={printableMeterData} 
+                                        onClose={() => {
+                                            setShowMeterReport(false);
+                                            setPrintableMeterData(null);
+                                        }} 
+                                    />
+                                )}
+
                                 {/* Meter Reading Specific Filter */}
                                 <div className="flex items-center justify-between mb-6 p-4 bg-gray-50 rounded-lg">
                                     <div className="flex items-center gap-4">
@@ -1159,12 +1568,12 @@ const Reports = () => {
                                         
                                         {/* Export Buttons */}
                                         <button
-                                            onClick={handleExportMeterReadingsExcel}
+                                            onClick={handleExportMeterReadingsPdf}
                                             disabled={exporting}
                                             className="flex items-center px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             <span className="material-symbols-outlined mr-1 text-sm">download</span>
-                                            {exporting ? 'Exporting...' : 'Export to Excel'}
+                                            {exporting ? 'Exporting...' : 'Export to PDF'}
                                         </button>
                                     </div>
                                     <div className="text-sm text-gray-600">
@@ -1237,6 +1646,17 @@ const Reports = () => {
                         {/* Announcement History Table */}
                         {activeTab === 'announcement' && (
                             <div>
+                                {/* Show Printable Report if active */}
+                                {showAnnouncementReport && (
+                                    <PrintableAnnouncementReport 
+                                        data={printableAnnouncementData} 
+                                        onClose={() => {
+                                            setShowAnnouncementReport(false);
+                                            setPrintableAnnouncementData(null);
+                                        }} 
+                                    />
+                                )}
+
                                 {/* Announcement History Specific Filter */}
                                 <div className="flex items-center justify-between mb-6 p-4 bg-gray-50 rounded-lg">
                                     <div className="flex items-center gap-4">
@@ -1254,12 +1674,12 @@ const Reports = () => {
                                         
                                         {/* Export Buttons */}
                                         <button
-                                            onClick={handleExportAnnouncementsExcel}
+                                            onClick={handleExportAnnouncementsPdf}
                                             disabled={exporting}
                                             className="flex items-center px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             <span className="material-symbols-outlined mr-1 text-sm">download</span>
-                                            {exporting ? 'Exporting...' : 'Export to Excel'}
+                                            {exporting ? 'Exporting...' : 'Export to PDF'}
                                         </button>
                                     </div>
                                     <div className="text-sm text-gray-600">
@@ -1339,6 +1759,17 @@ const Reports = () => {
                         {/* Accounts Report Table */}
                         {activeTab === 'accounts' && (
                             <div>
+                                {/* Show Printable Report if active */}
+                                {showAccountsReport && (
+                                    <PrintableAccountsReport 
+                                        data={printableAccountsData} 
+                                        onClose={() => {
+                                            setShowAccountsReport(false);
+                                            setPrintableAccountsData(null);
+                                        }} 
+                                    />
+                                )}
+
                                 {/* Accounts Specific Filter */}
                                 <div className="flex items-center justify-between mb-6 p-4 bg-gray-50 rounded-lg">
                                     <div className="flex items-center gap-4">
@@ -1356,12 +1787,12 @@ const Reports = () => {
                                         
                                         {/* Export Buttons */}
                                         <button
-                                            onClick={handleExportAccountsExcel}
+                                            onClick={handleExportAccountsPdf}
                                             disabled={exporting}
                                             className="flex items-center px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             <span className="material-symbols-outlined mr-1 text-sm">download</span>
-                                            {exporting ? 'Exporting...' : 'Export to Excel'}
+                                            {exporting ? 'Exporting...' : 'Export to PDF'}
                                         </button>
                                     </div>
                                     <div className="text-sm text-gray-600">

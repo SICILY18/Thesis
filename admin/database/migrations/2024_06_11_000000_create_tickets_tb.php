@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('subcategory');
             $table->string('subject');
             $table->text('description');
-            $table->enum('status', ['open', 'pending', 'resolved', 'closed'])->default('open');
+            $table->enum('status', ['Pending', 'In Progress', 'Resolved'])->default('Pending');
             $table->enum('priority', ['Low', 'Medium', 'High'])->default('Medium');
             $table->text('ticket_remarks')->nullable();
             $table->string('image_url')->nullable();

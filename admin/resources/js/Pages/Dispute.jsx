@@ -3,15 +3,27 @@ import axios from 'axios';
 import AdminLayout from '@/Layouts/AdminLayout';
 import Modal from '@/Components/Modal';
 
-const getStatusStyle = (status) => {
-    const normalizedStatus = status?.toLowerCase();
-    const styles = {
-        'open': 'bg-green-200 text-green-800',
-        'in progress': 'bg-yellow-200 text-yellow-800',
-        'resolved': 'bg-red-300 text-red-800'
+const STATUS_COLORS = {
+    'Pending': { bg: '#FFC107', fg: '#000000' },
+    'In Progress': { bg: '#2196F3', fg: '#FFFFFF' },
+    'Resolved': { bg: '#4CAF50', fg: '#FFFFFF' }
+};
+
+const formatStatus = (status) => {
+    const map = {
+        'open': 'Pending',
+        'pending': 'Pending',
+        'in progress': 'In Progress',
+        'resolved': 'Resolved',
+        'closed': 'Resolved'
     };
-    const style = styles[normalizedStatus] || 'bg-gray-200 text-gray-900';
-    return `${style} px-3 py-1 rounded-full text-sm font-semibold flex items-center justify-center min-w-[100px]`;
+    return map[(status || '').toLowerCase()] || status || 'Pending';
+};
+
+const getStatusStyle = (status) => {
+    const label = formatStatus(status);
+    const colors = STATUS_COLORS[label] || { bg: '#E5E7EB', fg: '#111827' };
+    return `px-3 py-1 rounded-full text-sm font-semibold flex items-center justify-center min-w-[100px]`;
 };
 
 const formatDate = (dateString) => {
@@ -26,7 +38,7 @@ const formatDate = (dateString) => {
 };
 
 const TABS = [
-    { key: 'disputes', label: 'Disputes', status: 'Open' },
+    { key: 'disputes', label: 'Disputes', status: 'Pending' },
     { key: 'resolved', label: 'Resolved', status: 'Resolved' }
 ];
 
@@ -119,7 +131,7 @@ const Dispute = () => {
         const targetSubject = 'non-technical - billing concern (high/low billing)';
         
         return normalizedSubject === targetSubject &&
-            ticket.status === (activeTab === 'disputes' ? 'Open' : 'Resolved');
+            formatStatus(ticket.status) === (activeTab === 'disputes' ? 'Pending' : 'Resolved');
     });
 
     // Fetch rate when customer type is available
@@ -254,7 +266,7 @@ const Dispute = () => {
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {filteredTickets.length === 0 ? (
                                     <tr>
-                                        <td colSpan={4} className="text-center py-6 text-gray-500">No {activeTab === 'disputes' ? 'open disputes' : 'resolved disputes'} found.</td>
+                                        <td colSpan={4} className="text-center py-6 text-gray-500">No {activeTab === 'disputes' ? 'pending disputes' : 'resolved disputes'} found.</td>
                                     </tr>
                                 ) : filteredTickets.map((ticket, index) => (
                                     <tr key={ticket.id || ticket.ticket_reference || `ticket-${index}`} className="hover:bg-gray-50">
@@ -262,7 +274,12 @@ const Dispute = () => {
                                             <span className="text-sm font-medium text-gray-900">{ticket.subject || '-'}</span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-center">
-                                            <span className={`inline-flex items-center justify-center ${getStatusStyle(ticket.status)}`}>{ticket.status}</span>
+                                            <span
+                                                className={`inline-flex items-center justify-center ${getStatusStyle(ticket.status)}`}
+                                                style={{ backgroundColor: STATUS_COLORS[formatStatus(ticket.status)]?.bg, color: STATUS_COLORS[formatStatus(ticket.status)]?.fg }}
+                                            >
+                                                {formatStatus(ticket.status)}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                             {ticket.created_at ? formatDate(ticket.created_at) : '-'}
@@ -309,7 +326,12 @@ const Dispute = () => {
                                         <div className="grid grid-cols-3 gap-2 items-center">
                                             <label className="text-sm font-medium text-gray-700">Status:</label>
                                             <span className="col-span-2">
-                                                <span className={`px-3 py-1 inline-flex text-sm font-semibold rounded-full ${getStatusStyle(viewingTicket.status)}`}>{viewingTicket.status}</span>
+                                                <span
+                                                    className={`px-3 py-1 inline-flex text-sm font-semibold rounded-full ${getStatusStyle(viewingTicket.status)}`}
+                                                    style={{ backgroundColor: STATUS_COLORS[formatStatus(viewingTicket.status)]?.bg, color: STATUS_COLORS[formatStatus(viewingTicket.status)]?.fg }}
+                                                >
+                                                    {formatStatus(viewingTicket.status)}
+                                                </span>
                                             </span>
                                         </div>
                                         <div className="grid grid-cols-3 gap-2 items-center">

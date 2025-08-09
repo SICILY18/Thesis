@@ -69,7 +69,8 @@ class TicketController extends Controller
                     'priority' => $ticket['priority'],
                     'ticket_reference' => $ticket['ticket_reference'],
                     'customer_name' => $customer ? $customer['full_name'] : 'Account Number',
-                    'account_number' => $ticket['account_number'] ?? '-'
+                    'account_number' => $ticket['account_number'] ?? '-',
+                    'image_url' => $ticket['image_url'] ?? null
                 ];
             }, $tickets);
 
@@ -115,7 +116,7 @@ class TicketController extends Controller
                 'subcategory' => $request->subcategory,
                 'subject' => $subject,
                 'description' => $request->description,
-                'status' => 'Open',
+                'status' => 'Pending',
                 'priority' => 'Medium',
                 'ticket_remarks' => '',
                 'image_url' => $imageUrl,
@@ -186,7 +187,7 @@ class TicketController extends Controller
 
             // Add new remark
             $remarksHistory[] = [
-                'status' => $ticket['status'] ?? 'Open',
+                'status' => $ticket['status'] ?? 'Pending',
                 'remarks' => $request->remarks,
                 'timestamp' => now()->toIso8601String(),
                 'user' => auth()->user()->name ?? 'Admin User'
@@ -258,7 +259,7 @@ class TicketController extends Controller
         ]);
         
         $request->validate([
-            'status' => 'required|string|in:Open,In Progress,Resolved',
+            'status' => 'required|string|in:Pending,In Progress,Resolved',
             'remarks' => 'required|string'
         ]);
 
@@ -317,19 +318,8 @@ class TicketController extends Controller
                 throw new \Exception($updateResult['error'] ?? 'Failed to update ticket');
             }
 
-            // Get the updated ticket
-            $updatedResult = $this->supabase->query('tickets_tb', '*', [
-                'select' => '*',
-                'filter' => [
-                    'ticket_id' => ['eq', $ticketId]
-                ]
-            ]);
-
-            if (!$updatedResult['success'] || empty($updatedResult['data'])) {
-                throw new \Exception('Failed to fetch updated ticket');
-            }
-
-            $updatedTicket = $updatedResult['data'][0];
+            // Prefer returned representation when available; fallback to original + updateData
+            $updatedTicket = $updateResult['data'][0] ?? array_merge($ticket, $updateData);
 
             return response()->json([
                 'success' => true,
@@ -341,7 +331,7 @@ class TicketController extends Controller
                     'created_at' => $updatedTicket['created_at'],
                     'updated_at' => $updatedTicket['updated_at'],
                     'remarks' => $updatedTicket['ticket_remarks'],
-                    'remarksHistory' => json_decode($updatedTicket['remarks_history'], true),
+                    'remarksHistory' => is_string($updatedTicket['remarks_history']) ? json_decode($updatedTicket['remarks_history'], true) : ($updatedTicket['remarks_history'] ?? []),
                     'description' => $updatedTicket['description'],
                     'category' => $updatedTicket['category'],
                     'subcategory' => $updatedTicket['subcategory'],

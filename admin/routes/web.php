@@ -311,6 +311,14 @@ Route::middleware(['web', 'admin.auth'])->prefix('admin')->group(function () {
         Route::get('/accounts/excel', [App\Http\Controllers\ExportController::class, 'exportAccountsExcel'])->name('admin.exports.accounts.excel');
         Route::get('/accounts/pdf', [App\Http\Controllers\ExportController::class, 'exportAccountsPdf'])->name('admin.exports.accounts.pdf');
     });
+
+    // Printable report routes
+    Route::prefix('reports')->group(function () {
+        Route::get('/payment-reports/print', [App\Http\Controllers\ExportController::class, 'printPaymentReports'])->name('admin.reports.payment-reports.print');
+        Route::get('/meter-readings/print', [App\Http\Controllers\ExportController::class, 'printMeterReadings'])->name('admin.reports.meter-readings.print');
+        Route::get('/announcements/print', [App\Http\Controllers\ExportController::class, 'printAnnouncements'])->name('admin.reports.announcements.print');
+        Route::get('/accounts/print', [App\Http\Controllers\ExportController::class, 'printAccounts'])->name('admin.reports.accounts.print');
+    });
 });
 
 // Protected bill handler routes

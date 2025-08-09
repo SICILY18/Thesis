@@ -31,6 +31,8 @@ class SemaphoreService
     public function sendSMS($number, $message)
     {
         try {
+            // Normalize phone number to 09XXXXXXXXX format (PH)
+            $number = $this->normalizePhoneNumber($number);
             // Log the request
             Log::info('Attempting to send SMS', [
                 'number' => $number,
@@ -120,9 +122,10 @@ class SemaphoreService
             ]);
 
             // Validate phone numbers
-            $validNumbers = array_filter($numbers, function($number) {
+            $normalizedNumbers = array_map(function ($n) { return $this->normalizePhoneNumber($n); }, $numbers);
+            $validNumbers = array_values(array_filter($normalizedNumbers, function($number) {
                 return preg_match('/^09\d{9}$/', $number);
-            });
+            }));
 
             if (empty($validNumbers)) {
                 Log::error('No valid phone numbers provided for bulk SMS');
@@ -181,5 +184,26 @@ class SemaphoreService
                 'error' => 'Failed to send bulk SMS: ' . $e->getMessage()
             ];
         }
+    }
+
+    private function normalizePhoneNumber(string $rawNumber): string
+    {
+        // Remove spaces, dashes, and plus signs except for leading +
+        $number = trim($rawNumber);
+        $number = preg_replace('/[\s-]+/', '', $number);
+
+        // Convert +63XXXXXXXXXX or 63XXXXXXXXXX to 09XXXXXXXXX
+        if (strpos($number, '+63') === 0) {
+            $number = '0' . substr($number, 3);
+        } elseif (strpos($number, '63') === 0 && strlen($number) === 12) {
+            $number = '0' . substr($number, 2);
+        }
+
+        // If starts with just 9 and is 10 digits, prefix 0
+        if (preg_match('/^9\d{9}$/', $number)) {
+            $number = '0' . $number;
+        }
+
+        return $number;
     }
 } 

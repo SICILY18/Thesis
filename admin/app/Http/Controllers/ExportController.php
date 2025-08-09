@@ -378,4 +378,155 @@ class ExportController extends Controller
             ], 500);
         }
     }
+
+    public function printPaymentReports(Request $request)
+    {
+        try {
+            // Get all payment reports data using SupabaseService
+            $payments = $this->supabase->query('bill_payment_validation', '*', [
+                'order' => 'payment_date.desc'
+            ]);
+
+            $data = [
+                'payments' => $payments,
+                'title' => 'Payment Reports',
+                'generated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'total_records' => count($payments),
+                'total_amount' => array_sum(array_column($payments, 'amount'))
+            ];
+
+            return view('exports.payment-reports-print', $data);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error generating payment reports print view: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function printMeterReadings(Request $request)
+    {
+        try {
+            $accountType = $request->get('accountType');
+            
+            $query = DB::table('meter_readings as mr')
+                ->leftJoin('customers_tb as c', 'mr.account_number', '=', 'c.account_number')
+                ->select([
+                    'mr.id',
+                    'mr.reading_date',
+                    'mr.account_number',
+                    'mr.meter_number',
+                    'mr.reading_value',
+                    'mr.amount',
+                    'mr.remarks',
+                    'c.full_name as customer_name',
+                    'c.account_type'
+                ]);
+
+            if ($accountType && $accountType !== 'All') {
+                $query->where('c.account_type', $accountType);
+            }
+
+            $readings = $query->orderBy('mr.reading_date', 'desc')->get();
+
+            $data = [
+                'readings' => $readings,
+                'title' => 'Meter Readings Report',
+                'account_type_filter' => $accountType,
+                'generated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'total_records' => $readings->count(),
+                'total_amount' => $readings->sum('amount')
+            ];
+
+            return view('exports.meter-readings-print', $data);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error generating meter readings print view: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function printAnnouncements(Request $request)
+    {
+        try {
+            $status = $request->get('status');
+
+            $query = DB::table('announcements_tb')
+                ->select([
+                    'id',
+                    'title',
+                    'body',
+                    'status',
+                    'created_at',
+                    'updated_at'
+                ]);
+
+            if ($status && $status !== 'All') {
+                $query->where('status', $status);
+            }
+
+            $announcements = $query->orderBy('created_at', 'desc')->get();
+
+            $data = [
+                'announcements' => $announcements,
+                'title' => 'Announcements Report',
+                'status_filter' => $status,
+                'generated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'total_records' => $announcements->count()
+            ];
+
+            return view('exports.announcements-print', $data);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error generating announcements print view: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function printAccounts(Request $request)
+    {
+        try {
+            $accountType = $request->get('type');
+
+            $query = DB::table('customers_tb')
+                ->select([
+                    'id',
+                    'full_name',
+                    'account_number',
+                    'account_type',
+                    'address',
+                    'contact_number',
+                    'email',
+                    'status',
+                    'created_at'
+                ]);
+
+            if ($accountType && $accountType !== 'all') {
+                $query->where('account_type', ucfirst($accountType));
+            }
+
+            $accounts = $query->orderBy('created_at', 'desc')->get();
+
+            $data = [
+                'accounts' => $accounts,
+                'title' => 'Accounts Report',
+                'account_type_filter' => $accountType,
+                'generated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'total_records' => $accounts->count()
+            ];
+
+            return view('exports.accounts-print', $data);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error generating accounts print view: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

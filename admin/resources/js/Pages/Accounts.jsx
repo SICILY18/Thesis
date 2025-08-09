@@ -141,16 +141,18 @@ const Accounts = () => {
             if (response.data.success) {
                 const savedViewedTickets = new Set(JSON.parse(localStorage.getItem('viewedTickets') || '[]'));
                 
-                const openTickets = response.data.data.filter(ticket => {
-                    const isOpen = ticket.status.toLowerCase() === 'open';
+                const pendingTickets = response.data.data.filter(ticket => {
+                    const normalized = (ticket.status || '').toLowerCase();
+                    const isPending = normalized === 'pending' || normalized === 'open';
                     const isUnviewed = !savedViewedTickets.has(ticket.ticket_id);
-                    return isOpen && isUnviewed;
+                    return isPending && isUnviewed;
                 });
-                setNewTicketsCount(openTickets.length);
+                setNewTicketsCount(pendingTickets.length);
 
                 const newViewedTickets = new Set(savedViewedTickets);
                 response.data.data.forEach(ticket => {
-                    if (ticket.status.toLowerCase() !== 'open') {
+                    const normalized = (ticket.status || '').toLowerCase();
+                    if (normalized !== 'pending' && normalized !== 'open') {
                         newViewedTickets.add(ticket.ticket_id);
                     }
                 });
